@@ -22,7 +22,11 @@ set(ISL_CODEGEN_FILES
 
 if (GPU_CODEGEN)
   set (GPGPU_CODEGEN_FILES
-       CodeGen/PTXGenerator.cpp)
+       CodeGen/PTXGenerator.cpp
+       CodeGen/GPGPU/ppcg.c
+       CodeGen/GPGPU/ppcg_options.c
+       CodeGen/GPGPU/gpu.c
+       CodeGen/GPGPU/schedule.c)
 endif (GPU_CODEGEN)
 
 if (SCOPLIB_FOUND)
