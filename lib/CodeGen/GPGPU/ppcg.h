@@ -4,7 +4,7 @@
 #include <isl/set.h>
 #include <isl/union_set.h>
 #include <isl/union_map.h>
-#include <pet.h>
+#include "pet.h"
 
 #include "ppcg_options.h"
 
