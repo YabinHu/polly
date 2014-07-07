@@ -739,6 +739,7 @@ static int check_options(isl_ctx *ctx)
 	return 0;
 }
 
+#if 0
 int main(int argc, char **argv)
 {
 	int r;
@@ -769,3 +770,4 @@ int main(int argc, char **argv)
 
 	return r;
 }
+#endif
