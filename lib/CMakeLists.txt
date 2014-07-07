@@ -17,7 +17,10 @@ set(ISL_CODEGEN_FILES
 
 if (GPU_CODEGEN)
   set (GPGPU_CODEGEN_FILES
-       CodeGen/PTXGenerator.cpp)
+       CodeGen/PTXGenerator.cpp
+       CodeGen/GPGPU/gpu.cpp
+       CodeGen/GPGPU/ppcg.cpp
+       CodeGen/GPGPU/schedule.cpp)
 endif (GPU_CODEGEN)
 
 add_polly_library(Polly
