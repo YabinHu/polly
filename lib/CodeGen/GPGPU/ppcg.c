@@ -20,12 +20,8 @@
 #include <isl/schedule.h>
 #include <isl/ast_build.h>
 #include <isl/schedule.h>
-#include <pet.h>
 #include "ppcg.h"
 #include "ppcg_options.h"
-#include "cuda.h"
-#include "opencl.h"
-#include "cpu.h"
 
 struct options {
 	struct isl_options *isl;
