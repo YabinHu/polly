@@ -24,11 +24,11 @@
 #include <isl/options.h>
 #include <isl/ast_build.h>
 
-#include "cpu.h"
+// #include "cpu.h"
 #include "gpu.h"
 #include "schedule.h"
 #include "ppcg_options.h"
-#include "print.h"
+// #include "print.h"
 
 /* The fields stride, shift and shift_map only contain valid information
  * if shift != NULL.
