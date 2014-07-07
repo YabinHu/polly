@@ -9,6 +9,7 @@
 #include <isl/union_map.h>
 #include <isl/printer.h>
 #include <isl/id_to_ast_expr.h>
+#include <isl/id_to_pw_aff.h>
 
 #if defined(__cplusplus)
 extern "C" {
@@ -23,19 +24,47 @@ ISL_ARG_DECL(pet_options, struct pet_options, pet_options_args)
 int pet_options_set_autodetect(isl_ctx *ctx, int val);
 int pet_options_get_autodetect(isl_ctx *ctx);
 
+int pet_options_set_detect_conditional_assignment(isl_ctx *ctx, int val);
+int pet_options_get_detect_conditional_assignment(isl_ctx *ctx);
+
+/* If encapsulate-dynamic-control is set, then any dynamic control
+ * in the input program will be encapsulated in macro statements.
+ * This means in particular that no statements with arguments
+ * will be created.
+ */
+int pet_options_set_encapsulate_dynamic_control(isl_ctx *ctx, int val);
+int pet_options_get_encapsulate_dynamic_control(isl_ctx *ctx);
+
 #define	PET_OVERFLOW_AVOID	0
 #define	PET_OVERFLOW_IGNORE	1
 int pet_options_set_signed_overflow(isl_ctx *ctx, int val);
 int pet_options_get_signed_overflow(isl_ctx *ctx);
 
+struct pet_loc;
+typedef struct pet_loc pet_loc;
+
+/* Return an additional reference to "loc". */
+__isl_give pet_loc *pet_loc_copy(__isl_keep pet_loc *loc);
+/* Free a reference to "loc". */
+pet_loc *pet_loc_free(__isl_take pet_loc *loc);
+
+/* Return the offset in the input file of the start of "loc". */
+unsigned pet_loc_get_start(__isl_keep pet_loc *loc);
+/* Return the offset in the input file of the character after "loc". */
+unsigned pet_loc_get_end(__isl_keep pet_loc *loc);
+/* Return the line number of a line within the "loc" region. */
+int pet_loc_get_line(__isl_keep pet_loc *loc);
+/* Return the indentation of the "loc" region. */
+__isl_keep const char *pet_loc_get_indent(__isl_keep pet_loc *loc);
+
 enum pet_expr_type {
+	pet_expr_error = -1,
 	pet_expr_access,
 	pet_expr_call,
 	pet_expr_cast,
+	pet_expr_int,
 	pet_expr_double,
-	pet_expr_unary,
-	pet_expr_binary,
-	pet_expr_ternary
+	pet_expr_op
 };
 
 enum pet_op_type {
@@ -50,8 +79,12 @@ enum pet_op_type {
 	pet_op_mul,
 	pet_op_div,
 	pet_op_mod,
+	pet_op_shl,
+	pet_op_shr,
 	pet_op_eq,
+	pet_op_ne,
 	pet_op_le,
+	pet_op_ge,
 	pet_op_lt,
 	pet_op_gt,
 	pet_op_minus,
@@ -60,7 +93,16 @@ enum pet_op_type {
 	pet_op_pre_inc,
 	pet_op_pre_dec,
 	pet_op_address_of,
+	pet_op_assume,
 	pet_op_kill,
+	pet_op_and,
+	pet_op_xor,
+	pet_op_or,
+	pet_op_not,
+	pet_op_land,
+	pet_op_lor,
+	pet_op_lnot,
+	pet_op_cond,
 	pet_op_last
 };
 
@@ -87,73 +129,203 @@ enum pet_ter_arg_type {
 	pet_ter_false
 };
 
-/* d is valid when type == pet_expr_double
- * acc is valid when type == pet_expr_access
- * name is valid when type == pet_expr_call
- * type is valid when type == pet_expr_cast
- * op is valid otherwise
- *
- * For each access expression inside the body of a statement, acc.ref_id
- * is a unique reference identifier.
- * acc.index represents the index expression, while acc.access
- * represents the corresponding access relation.
- * The output dimension of the index expression may be smaller
- * than the number of dimensions of the accessed array.
- * The target space of the access relation, on the other hand,
- * is equal to the array space.
- * Both acc.index and acc.access usually map an iteration space
- * to a (partial) data space.
- * If the access has arguments, however, then the domain of the
- * mapping is a wrapped mapping from the iteration space
- * to a space of dimensionality equal to the number of arguments.
- * Each dimension in this space corresponds to the value of the
- * corresponding argument.
- *
- * The ranges of the index expressions and access relations may
- * also be wrapped relations, in which case the expression represents
- * a member access, with the structure represented by the domain
- * of this wrapped relation and the member represented by the range.
- * In case of nested member accesses, the domain is itself a wrapped
- * relation.
- *
- * If the data space is unnamed (and 1D), then it represents
- * the set of integers.  That is, the access represents a value that
- * is equal to the index.
- *
- * A double is represented as both an (approximate) value "val" and
- * a string representation "s".
- */
-struct pet_expr {
-	enum pet_expr_type type;
+struct pet_expr;
+typedef struct pet_expr pet_expr;
 
-	unsigned n_arg;
-	struct pet_expr **args;
+/* Return an additional reference to "expr". */
+__isl_give pet_expr *pet_expr_copy(__isl_keep pet_expr *expr);
+/* Free a reference to "expr". */
+__isl_null pet_expr *pet_expr_free(__isl_take pet_expr *expr);
 
-	union {
-		struct {
-			isl_id *ref_id;
-			isl_map *access;
-			isl_multi_pw_aff *index;
-			int read;
-			int write;
-		} acc;
-		enum pet_op_type op;
-		char *name;
-		char *type_name;
-		struct {
-			double val;
-			char *s;
-		} d;
-	};
-};
+/* Return the isl_ctx in which "expr" was created. */
+isl_ctx *pet_expr_get_ctx(__isl_keep pet_expr *expr);
+
+/* Return the type of "expr". */
+enum pet_expr_type pet_expr_get_type(__isl_keep pet_expr *expr);
+/* Return the number of arguments of "expr". */
+int pet_expr_get_n_arg(__isl_keep pet_expr *expr);
+/* Set the number of arguments of "expr" to "n". */
+__isl_give pet_expr *pet_expr_set_n_arg(__isl_take pet_expr *expr, int n);
+/* Return the argument of "expr" at position "pos". */
+__isl_give pet_expr *pet_expr_get_arg(__isl_keep pet_expr *expr, int pos);
+/* Replace the argument of "expr" at position "pos" by "arg". */
+__isl_give pet_expr *pet_expr_set_arg(__isl_take pet_expr *expr, int pos,
+	__isl_take pet_expr *arg);
+
+/* Return the operation type of operation expression "expr". */
+enum pet_op_type pet_expr_op_get_type(__isl_keep pet_expr *expr);
+/* Replace the operation type of operation expression "expr" by "type". */
+__isl_give pet_expr *pet_expr_op_set_type(__isl_take pet_expr *expr,
+	enum pet_op_type type);
+
+/* Construct a (read) access pet_expr from an index expression. */
+__isl_give pet_expr *pet_expr_from_index(__isl_take isl_multi_pw_aff *index);
+
+/* Does "expr" represent an affine expression? */
+int pet_expr_is_affine(__isl_keep pet_expr *expr);
+/* Does the access expression "expr" read the accessed elements? */
+int pet_expr_access_is_read(__isl_keep pet_expr *expr);
+/* Does the access expression "expr" write to the accessed elements? */
+int pet_expr_access_is_write(__isl_keep pet_expr *expr);
+/* Mark "expr" as a read dependening on "read". */
+__isl_give pet_expr *pet_expr_access_set_read(__isl_take pet_expr *expr,
+	int read);
+/* Mark "expr" as a write dependening on "write". */
+__isl_give pet_expr *pet_expr_access_set_write(__isl_take pet_expr *expr,
+	int write);
+/* Return the reference identifier of access expression "expr". */
+__isl_give isl_id *pet_expr_access_get_ref_id(__isl_keep pet_expr *expr);
+/* Replace the reference identifier of access expression "expr" by "ref_id". */
+__isl_give pet_expr *pet_expr_access_set_ref_id(__isl_take pet_expr *expr,
+	__isl_take isl_id *ref_id);
+/* Return the identifier of the outer array accessed by "expr". */
+__isl_give isl_id *pet_expr_access_get_id(__isl_keep pet_expr *expr);
+/* Return the index expression of access expression "expr". */
+__isl_give isl_multi_pw_aff *pet_expr_access_get_index(
+	__isl_keep pet_expr *expr);
 
 /* Return the potential read access relation of access expression "expr". */
-__isl_give isl_map *pet_expr_access_get_may_access(struct pet_expr *expr);
+__isl_give isl_map *pet_expr_access_get_may_access(__isl_keep pet_expr *expr);
+/* Return the definite access relation of access expression "expr". */
+__isl_give isl_map *pet_expr_access_get_must_access(__isl_keep pet_expr *expr);
+/* Return the argument dependent access relation of access expression "expr". */
+__isl_give isl_map *pet_expr_access_get_dependent_access(
+	__isl_keep pet_expr *expr);
 /* Return the tagged potential read access relation of access "expr". */
 __isl_give isl_map *pet_expr_access_get_tagged_may_access(
-	struct pet_expr *expr);
+	__isl_keep pet_expr *expr);
 
-/* If the statement has arguments, i.e., n_arg != 0, then
+/* Return the name of the function called by "expr". */
+__isl_keep const char *pet_expr_call_get_name(__isl_keep pet_expr *expr);
+/* Replace the name of the function called by "expr" by "name". */
+__isl_give pet_expr *pet_expr_call_set_name(__isl_take pet_expr *expr,
+	__isl_keep const char *name);
+
+/* Replace the type of the cast performed by "expr" by "name". */
+__isl_give pet_expr *pet_expr_cast_set_type_name(__isl_take pet_expr *expr,
+	__isl_keep const char *name);
+
+/* Return the value of the integer represented by "expr". */
+__isl_give isl_val *pet_expr_int_get_val(__isl_keep pet_expr *expr);
+/* Replace the value of the integer represented by "expr" by "v". */
+__isl_give pet_expr *pet_expr_int_set_val(__isl_take pet_expr *expr,
+	__isl_take isl_val *v);
+
+/* Return a string representation of the double expression "expr". */
+__isl_give char *pet_expr_double_get_str(__isl_keep pet_expr *expr);
+/* Replace value and string representation of the double expression "expr" */
+__isl_give pet_expr *pet_expr_double_set(__isl_take pet_expr *expr,
+	double d, __isl_keep const char *s);
+
+/* Call "fn" on each of the subexpressions of "expr" of type pet_expr_access. */
+int pet_expr_foreach_access_expr(__isl_keep pet_expr *expr,
+	int (*fn)(__isl_keep pet_expr *expr, void *user), void *user);
+/* Call "fn" on each of the subexpressions of "expr" of type pet_expr_call. */
+int pet_expr_foreach_call_expr(__isl_keep pet_expr *expr,
+	int (*fn)(__isl_keep pet_expr *expr, void *user), void *user);
+
+struct pet_context;
+typedef struct pet_context pet_context;
+
+/* Create a context with the given domain. */
+__isl_give pet_context *pet_context_alloc(__isl_take isl_set *domain);
+/* Return an additional reference to "pc". */
+__isl_give pet_context *pet_context_copy(__isl_keep pet_context *pc);
+/* Free a reference to "pc". */
+__isl_null pet_context *pet_context_free(__isl_take pet_context *pc);
+
+/* Return the isl_ctx in which "pc" was created. */
+isl_ctx *pet_context_get_ctx(__isl_keep pet_context *pc);
+
+/* Extract an affine expression defined over the domain of "pc" from "expr"
+ * or return NaN.
+ */
+__isl_give isl_pw_aff *pet_expr_extract_affine(__isl_keep pet_expr *expr,
+	__isl_keep pet_context *pc);
+
+void pet_expr_dump(__isl_keep pet_expr *expr);
+
+enum pet_tree_type {
+	pet_tree_error = -1,
+	pet_tree_expr,
+	pet_tree_block,
+	pet_tree_break,
+	pet_tree_continue,
+	pet_tree_decl,		/* A declaration without initialization */
+	pet_tree_decl_init,	/* A declaration with initialization */
+	pet_tree_if,		/* An if without an else branch */
+	pet_tree_if_else,	/* An if with an else branch */
+	pet_tree_for,
+	pet_tree_infinite_loop,
+	pet_tree_while
+};
+
+struct pet_tree;
+typedef struct pet_tree pet_tree;
+
+/* Return the isl_ctx in which "tree" was created. */
+isl_ctx *pet_tree_get_ctx(__isl_keep pet_tree *tree);
+
+/* Return an additional reference to "tree". */
+__isl_give pet_tree *pet_tree_copy(__isl_keep pet_tree *tree);
+/* Free a reference to "tree". */
+__isl_null pet_tree *pet_tree_free(__isl_take pet_tree *tree);
+
+/* Return the location of "tree". */
+__isl_give pet_loc *pet_tree_get_loc(__isl_keep pet_tree *tree);
+
+/* Return the type of "tree". */
+enum pet_tree_type pet_tree_get_type(__isl_keep pet_tree *tree);
+
+/* Return the expression of the expression tree "tree". */
+__isl_give pet_expr *pet_tree_expr_get_expr(__isl_keep pet_tree *tree);
+
+/* Return the number of children of the block tree "tree". */
+int pet_tree_block_n_child(__isl_keep pet_tree *tree);
+/* Return child "pos" of the block tree "tree". */
+__isl_give pet_tree *pet_tree_block_get_child(__isl_keep pet_tree *tree,
+	int pos);
+
+/* Is "tree" a declaration (with or without initialization)? */
+int pet_tree_is_decl(__isl_keep pet_tree *tree);
+/* Return the variable declared by the declaration tree "tree". */
+__isl_give pet_expr *pet_tree_decl_get_var(__isl_keep pet_tree *tree);
+/* Return the initial value of the pet_tree_decl_init tree "tree". */
+__isl_give pet_expr *pet_tree_decl_get_init(__isl_keep pet_tree *tree);
+
+/* Return the condition of the if tree "tree". */
+__isl_give pet_expr *pet_tree_if_get_cond(__isl_keep pet_tree *tree);
+/* Return the then branch of the if tree "tree". */
+__isl_give pet_tree *pet_tree_if_get_then(__isl_keep pet_tree *tree);
+/* Return the else branch of the if tree with else branch "tree". */
+__isl_give pet_tree *pet_tree_if_get_else(__isl_keep pet_tree *tree);
+
+/* Is "tree" a for loop, a while loop or an infinite loop? */
+int pet_tree_is_loop(__isl_keep pet_tree *tree);
+/* Return the induction variable of the for loop "tree" */
+__isl_give pet_expr *pet_tree_loop_get_var(__isl_keep pet_tree *tree);
+/* Return the initial value of the induction variable of the for loop "tree" */
+__isl_give pet_expr *pet_tree_loop_get_init(__isl_keep pet_tree *tree);
+/* Return the condition of the loop tree "tree" */
+__isl_give pet_expr *pet_tree_loop_get_cond(__isl_keep pet_tree *tree);
+/* Return the induction variable of the for loop "tree" */
+__isl_give pet_expr *pet_tree_loop_get_inc(__isl_keep pet_tree *tree);
+/* Return the body of the loop tree "tree" */
+__isl_give pet_tree *pet_tree_loop_get_body(__isl_keep pet_tree *tree);
+
+/* Call "fn" on each top-level expression in the nodes of "tree" */
+int pet_tree_foreach_expr(__isl_keep pet_tree *tree,
+	int (*fn)(__isl_keep pet_expr *expr, void *user), void *user);
+/* Call "fn" on each access subexpression in the nodes of "tree" */
+int pet_tree_foreach_access_expr(__isl_keep pet_tree *tree,
+	int (*fn)(__isl_keep pet_expr *expr, void *user), void *user);
+
+void pet_tree_dump(__isl_keep pet_tree *tree);
+
+/* "loc" represents the region of the source code that is represented
+ * by this statement.
+ *
+ * If the statement has arguments, i.e., n_arg != 0, then
  * "domain" is a wrapped map, mapping the iteration domain
  * to the values of the arguments for which this statement
  * is executed.
@@ -165,15 +337,29 @@ __isl_give isl_map *pet_expr_access_get_tagged_may_access(
  * for all of those accessed elements.
  */
 struct pet_stmt {
-	int line;
+	pet_loc *loc;
 	isl_set *domain;
 	isl_map *schedule;
-	struct pet_expr *body;
+	pet_tree *body;
 
 	unsigned n_arg;
-	struct pet_expr **args;
+	pet_expr **args;
 };
 
+/* Return the iteration space of "stmt". */
+__isl_give isl_space *pet_stmt_get_space(struct pet_stmt *stmt);
+
+/* Is "stmt" an assignment statement? */
+int pet_stmt_is_assign(struct pet_stmt *stmt);
+/* Is "stmt" a kill statement? */
+int pet_stmt_is_kill(struct pet_stmt *stmt);
+
+/* pet_stmt_build_ast_exprs is currently limited to only handle
+ * some forms of data dependent accesses.
+ * If pet_stmt_can_build_ast_exprs returns 1, then pet_stmt_build_ast_exprs
+ * can safely be called on "stmt".
+ */
+int pet_stmt_can_build_ast_exprs(struct pet_stmt *stmt);
 /* Construct an associative array from reference identifiers of
  * access expressions in "stmt" to the corresponding isl_ast_expr.
  * Each index expression is first transformed through "fn_index"
@@ -251,24 +437,40 @@ struct pet_implication {
 	isl_map *extension;
 };
 
-/* The start and end fields contain the offsets in the input file
- * of the scop, where end points to the first character after the scop.
+/* This structure represents an independence implied by a for loop
+ * that is marked as independent in the source code.
+ * "filter" contains pairs of statement instances that are guaranteed
+ * not to be dependent on each other based on the independent for loop,
+ * assuming that no dependences carried by this loop are implied
+ * by the variables in "local".
+ * "local" contains the variables that are local to the loop that was
+ * marked independent.
+ */
+struct pet_independence {
+	isl_union_map *filter;
+	isl_union_set *local;
+};
+
+/* "loc" represents the region of the source code that is represented
+ * by this scop.
  * If the scop was detected based on scop and endscop pragmas, then
- * the lines containing these pragmas are included in this range.
- * Internally, end may be zero to indicate that no offset information is
- * available (yet).
- * The context describes the set of parameter values for which
- * the scop can be executed.
+ * the lines containing these pragmas are included in this region.
+ * In the final result, the context describes the set of parameter values
+ * for which the scop can be executed.
+ * During the construction of the pet_scop, the context lives in a set space
+ * where each dimension refers to an outer loop.
  * context_value describes assignments to the parameters (if any)
  * outside of the scop.
  *
  * The n_type types define types that may be referenced from by the arrays.
  *
  * The n_implication implications describe implications on boolean filters.
+ *
+ * The n_independence independences describe independences implied
+ * by for loops that are marked independent in the source code.
  */
 struct pet_scop {
-	unsigned start;
-	unsigned end;
+	pet_loc *loc;
 
 	isl_set *context;
 	isl_set *context_value;
@@ -284,6 +486,9 @@ struct pet_scop {
 
 	int n_implication;
 	struct pet_implication **implications;
+
+	int n_independence;
+	struct pet_independence **independences;
 };
 
 /* Return a textual representation of the operator. */
@@ -319,6 +524,12 @@ struct pet_scop *pet_scop_align_params(struct pet_scop *scop);
 int pet_scop_has_data_dependent_accesses(struct pet_scop *scop);
 /* Does "scop" contain any data dependent conditions? */
 int pet_scop_has_data_dependent_conditions(struct pet_scop *scop);
+/* pet_stmt_build_ast_exprs is currently limited to only handle
+ * some forms of data dependent accesses.
+ * If pet_scop_can_build_ast_exprs returns 1, then pet_stmt_build_ast_exprs
+ * can safely be called on all statements in the scop.
+ */
+int pet_scop_can_build_ast_exprs(struct pet_scop *scop);
 
 void pet_scop_dump(struct pet_scop *scop);
 struct pet_scop *pet_scop_free(struct pet_scop *scop);
