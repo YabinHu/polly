@@ -4086,9 +4086,9 @@ static __isl_give isl_ast_node *at_each_domain(__isl_take isl_ast_node *node,
 	data.accesses = stmt->u.d.stmt->accesses;
 	data.iterator_map = iterator_map;
 	data.sched2shared = sched2shared;
-	stmt->u.d.ref2expr = pet_stmt_build_ast_exprs(stmt->u.d.stmt->stmt,
+	stmt->u.d.ref2expr = NULL/*pet_stmt_build_ast_exprs(stmt->u.d.stmt->stmt,
 					    build, &transform_index, &data,
-					    &transform_expr, &data);
+					    &transform_expr, &data)*/;
 	isl_id_free(id);
 	isl_pw_multi_aff_free(iterator_map);
 	isl_pw_multi_aff_free(sched2shared);
@@ -5803,7 +5803,7 @@ static struct gpu_stmt *extract_stmts(isl_ctx *ctx, struct ppcg_scop *scop,
 	for (i = 0; i < scop->n_stmt; ++i) {
 		struct gpu_stmt *s = &stmts[i];
 
-		s->id = isl_set_get_tuple_id(scop->stmts[i]->domain);
+		s->id = /*isl_set_get_tuple_id(*/scop->stmts[i]->getDomainId();
 		s->stmt = scop->stmts[i];
 		pet_stmt_extract_accesses(s);
 	}
