@@ -305,6 +305,7 @@ static MemoryAccess::ReductionType getReductionType(const BinaryOperator *BinOp,
 //===----------------------------------------------------------------------===//
 
 MemoryAccess::~MemoryAccess() {
+  isl_id_free(RefId);
   isl_map_free(AccessRelation);
   isl_map_free(newAccessRelation);
 }
@@ -395,12 +396,19 @@ void MemoryAccess::assumeNoOutOfBound(const IRAccess &Access) {
   isl_space_free(Space);
 }
 
+int MemoryAccess::NumRef = 0;
+
 MemoryAccess::MemoryAccess(const IRAccess &Access, const Instruction *AccInst,
                            ScopStmt *Statement)
     : Statement(Statement), Inst(AccInst), newAccessRelation(nullptr) {
 
+  isl_ctx *ctx = Statement->getIslCtx();
   BaseAddr = Access.getBase();
   BaseName = getIslCompatibleName("MemRef_", getBaseAddr(), "");
+
+  char RefIdName[50];
+  snprintf(RefIdName, sizeof(RefIdName), "__pet_ref_%d", NumRef++);
+  RefId = isl_id_alloc(ctx, RefIdName, nullptr);
 
   if (!Access.isAffine()) {
     // We overapproximate non-affine accesses with a possible access to the
@@ -414,8 +422,7 @@ MemoryAccess::MemoryAccess(const IRAccess &Access, const Instruction *AccInst,
 
   Type = Access.isRead() ? READ : MUST_WRITE;
 
-  isl_space *Space = isl_space_alloc(Statement->getIslCtx(), 0,
-                                     Statement->getNumIterators(), 0);
+  isl_space *Space = isl_space_alloc(ctx, 0, Statement->getNumIterators(), 0);
   AccessRelation = isl_map_universe(Space);
 
   for (int i = 0, Size = Access.Subscripts.size(); i < Size; ++i) {
@@ -432,8 +439,7 @@ MemoryAccess::MemoryAccess(const IRAccess &Access, const Instruction *AccInst,
       // each other in memory. By this division we make this characteristic
       // obvious again.
       isl_val *v;
-      v = isl_val_int_from_si(isl_pw_aff_get_ctx(Affine),
-                              Access.getElemSizeInBytes());
+      v = isl_val_int_from_si(ctx, Access.getElemSizeInBytes());
       Affine = isl_pw_aff_scale_down_val(Affine, v);
     }
 
@@ -454,6 +460,10 @@ MemoryAccess::MemoryAccess(const IRAccess &Access, const Instruction *AccInst,
 void MemoryAccess::realignParams() {
   isl_space *ParamSpace = Statement->getParent()->getParamSpace();
   AccessRelation = isl_map_align_params(AccessRelation, ParamSpace);
+}
+
+__isl_give isl_id *MemoryAccess::getRefId() const {
+    return isl_id_copy(RefId);
 }
 
 MemoryAccess::MemoryAccess(const Value *BaseAddress, ScopStmt *Statement)
