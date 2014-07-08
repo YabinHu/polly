@@ -5864,21 +5864,21 @@ static __isl_give isl_printer *print_gpu(__isl_take isl_printer *p, void *user)
  * to h%d parameters and the T1P loops to the block dimensions.
  * Finally, we generate code for the remaining loops in a similar fashion.
  */
-static __isl_give isl_printer *generate(__isl_take isl_printer *p,
-	struct gpu_gen *gen, struct ppcg_scop *scop,
+static /*__isl_give isl_printer **/ int generate(/*__isl_take isl_printer *p,*/
+	isl_ctx *ctx, struct gpu_gen *gen, struct ppcg_scop *scop,
 	struct ppcg_options *options)
 {
 	struct gpu_prog *prog;
-	isl_ctx *ctx;
+	// isl_ctx *ctx;
 	isl_set *context, *guard;
 
 	if (!scop)
-		return isl_printer_free(p);
+		return /*isl_printer_free(p)*/ -1;
 
-	ctx = isl_printer_get_ctx(p);
+	// ctx = isl_printer_get_ctx(p);
 	prog = gpu_prog_alloc(ctx, scop);
 	if (!prog)
-		return isl_printer_free(p);
+		return /*isl_printer_free(p)*/ -1;
 
 	context = isl_set_copy(prog->context);
 	guard = isl_union_set_params(isl_union_set_copy(prog->scop->domain));
@@ -5888,27 +5888,39 @@ static __isl_give isl_printer *generate(__isl_take isl_printer *p,
 	gen->any_parallelism = 0;
 	compute_schedule(gen);
 
-	if (!gen->any_parallelism) {
-		isl_set_free(context);
-		isl_set_free(guard);
-		p = print_cpu(p, scop, options);
-	} else {
+	// if (!gen->any_parallelism) {
+	//	isl_set_free(context);
+	//	isl_set_free(guard);
+	//	p = print_cpu(p, scop, options);
+	//} else {
 		compute_copy_in_and_out(gen);
 		gen->tree = generate_host_code(gen);
-		p = ppcg_print_exposed_declarations(p, prog->scop);
-		p = ppcg_print_guarded(p, guard, context, &print_gpu, gen);
-		isl_ast_node_free(gen->tree);
-	}
+	//	p = ppcg_print_exposed_declarations(p, prog->scop);
+	//	p = ppcg_print_guarded(p, guard, context, &print_gpu, gen);
+	//	isl_ast_node_free(gen->tree);
+	//}
 
-	isl_union_map_free(gen->sched);
+	//isl_union_map_free(gen->sched);
 
-	gpu_prog_free(prog);
+	//gpu_prog_free(prog);
 
-	return p;
+	return /*p*/ 0;
+}
+
+static void ppcg_print_guard() {
+  // p = ppcg_print_exposed_declarations(p, prog->scop);
+  // p = ppcg_print_guarded(p, guard, context, &print_gpu, gen);
+}
+
+static void gpu_gen_free(struct gpu_gen *gen) {
+  isl_ast_node_free(gen->tree);
+  isl_union_map_free(gen->sched);
+  gpu_prog_free(gen->prog);
 }
 
 /* Wrapper around generate for use as a ppcg_transform callback.
  */
+#if 0
 static __isl_give isl_printer *generate_wrap(__isl_take isl_printer *p,
 	struct ppcg_scop *scop, void *user)
 {
@@ -5916,15 +5928,16 @@ static __isl_give isl_printer *generate_wrap(__isl_take isl_printer *p,
 
 	return generate(p, gen, scop, gen->options);
 }
+#endif
 
 /* Transform the code in the file called "input" by replacing
  * all scops by corresponding GPU code and write the results to "out".
  */
-int generate_gpu(isl_ctx *ctx, const char *input, FILE *out,
-	struct ppcg_options *options,
+int generate_gpu(isl_ctx *ctx, /*const char *input, FILE *out,*/
+	struct ppcg_scop *scop, struct ppcg_options *options /*,
 	__isl_give isl_printer *(*print)(__isl_take isl_printer *p,
 		struct gpu_prog *prog, __isl_keep isl_ast_node *tree,
-		struct gpu_types *types, void *user), void *user)
+		struct gpu_types *types, void *user), void *user*/)
 {
 	struct gpu_gen gen;
 	int r;
@@ -5934,8 +5947,8 @@ int generate_gpu(isl_ctx *ctx, const char *input, FILE *out,
 	gen.sizes = extract_sizes_from_str(ctx, options->sizes);
 	gen.options = options;
 	gen.kernel_id = 0;
-	gen.print = print;
-	gen.print_user = user;
+	gen.print = /*print*/NULL;
+	gen.print_user = /*user*/NULL;
 	gen.types.n = 0;
 	gen.types.name = NULL;
 
@@ -5944,7 +5957,8 @@ int generate_gpu(isl_ctx *ctx, const char *input, FILE *out,
 		gen.used_sizes = isl_union_map_empty(space);
 	}
 
-	r = ppcg_transform(ctx, input, out, options, &generate_wrap, &gen);
+	// r = ppcg_transform(ctx, input, out, options, &generate_wrap, &gen);
+        r = generate(ctx, &gen, scop, options);
 
 	if (options->debug->dump_sizes) {
 		isl_union_map_dump(gen.used_sizes);
