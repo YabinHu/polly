@@ -678,34 +678,28 @@ struct ppcg_transform_data {
  * not be able to print the transformed program, then just print
  * the original code.
  */
-static /*__isl_give isl_printer **/int transform(/*__isl_take isl_printer *p,*/
-	/*void *user*/struct ppcg_options *options, struct pet_scop *scop,
-        struct ppcg_scop **ps)
+static __isl_give isl_printer *transform(__isl_take isl_printer *p,
+	struct pet_scop *scop, void *user)
 {
-	// struct ppcg_transform_data *data = user;
-	// struct ppcg_scop *ps;
+	struct ppcg_transform_data *data = user;
+	struct ppcg_scop *ps;
 
 	if (!pet_scop_can_build_ast_exprs(scop) ||
 	    pet_scop_has_data_dependent_conditions(scop)) {
-		// p = pet_scop_print_original(scop, p);
+		p = pet_scop_print_original(scop, p);
 		pet_scop_free(scop);
-		return /*p*/ -1;
+		return p;
 	}
 
 	scop = pet_scop_align_params(scop);
-	*ps = ppcg_scop_from_pet_scop(scop, /*data->*/options);
+	ps = ppcg_scop_from_pet_scop(scop, data->options);
 
-	// p = data->transform(p, ps, data->user);
+	p = data->transform(p, ps, data->user);
 
-	// ppcg_scop_free(ps);
-	// pet_scop_free(scop);
-
-	return /*p*/ 0;
-}
-
-void ppcg_cleanup(struct pet_scop *scop, struct ppcg_scop *ps) {
 	ppcg_scop_free(ps);
 	pet_scop_free(scop);
+
+	return p;
 }
 
 /* Transform the C source file "input" by rewriting each scop
@@ -715,14 +709,13 @@ void ppcg_cleanup(struct pet_scop *scop, struct ppcg_scop *ps) {
  * This is a wrapper around pet_transform_C_source that transforms
  * the pet_scop to a ppcg_scop before calling "fn".
  */
-int ppcg_transform(/*isl_ctx *ctx, const char *input, FILE *out,*/
-	struct ppcg_options *options, struct pet_scop *scop,
-	/*__isl_give isl_printer *(*fn)(__isl_take isl_printer *p,*/
-	struct ppcg_scop *ps/*, void *user), void *user*/)
+int ppcg_transform(isl_ctx *ctx, const char *input, FILE *out,
+	struct ppcg_options *options,
+	__isl_give isl_printer *(*fn)(__isl_take isl_printer *p,
+		struct ppcg_scop *scop, void *user), void *user)
 {
-	// struct ppcg_transform_data data = { options, fn, user };
-	// return pet_transform_C_source(ctx, input, out, &transform, &data);
-        return transform(options, scop, &ps);
+	struct ppcg_transform_data data = { options, fn, user };
+	return pet_transform_C_source(ctx, input, out, &transform, &data);
 }
 
 /* Check consistency of options.
