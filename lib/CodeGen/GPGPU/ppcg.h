@@ -111,7 +111,7 @@ int ppcg_transform(isl_ctx *ctx, const char *input, FILE *out,
 	struct ppcg_options *options,
 	__isl_give isl_printer *(*fn)(__isl_take isl_printer *p,
 		struct ppcg_scop *scop, void *user), void *user);
-
 struct ppcg_scop *
 ppcg_scop_from_pet_scop(polly::Scop *scop, struct ppcg_options *options);
+void *ppcg_scop_free(struct ppcg_scop *ps);
 #endif

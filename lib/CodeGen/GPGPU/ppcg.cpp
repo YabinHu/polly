@@ -804,7 +804,7 @@ extractArraysInfo(polly::Scop *S, std::set<const llvm::Value *> ArrayBases) {
   return Arrays;
 }
 
-static void *ppcg_scop_free(struct ppcg_scop *ps)
+void *ppcg_scop_free(struct ppcg_scop *ps)
 {
 	if (!ps)
 		return NULL;
