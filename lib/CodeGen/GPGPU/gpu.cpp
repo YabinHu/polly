@@ -29,8 +29,11 @@
 // #include "cpu.h"
 #include "gpu.h"
 #include "schedule.h"
+#include "ppcg.h"
 #include "ppcg_options.h"
 // #include "print.h"
+
+using namespace polly;
 
 /* The fields stride, shift and shift_map only contain valid information
  * if shift != NULL.
@@ -5732,6 +5735,55 @@ struct ppcg_extract_access_data {
 	int single_expression;
 };
 
+/* Return the relation mapping domain iterations to all possibly
+ * accessed data elements, with its domain tagged with the reference
+ * identifier.
+ */
+static __isl_give isl_map *access_get_tagged_may_access(MemoryAccess *Acc) {
+  isl_map *access;
+
+  if (!Acc)
+    return NULL;
+
+  access = Acc->getAccessRelation();
+  access = tag_access(access, Acc->getRefID());
+
+  return access;
+}
+
+/* Extract a gpu_stmt_access from "expr", append it to the list
+ * that ends in *next_access and return the updated end of the list.
+ */
+static struct gpu_stmt_access **
+expr_extract_access(MemoryAccess *Acc, struct gpu_stmt_access **next_access) {
+  struct gpu_stmt_access *access;
+  isl_ctx *ctx = Acc->getStatement()->getIslCtx();
+
+  access = isl_alloc_type(ctx, struct gpu_stmt_access);
+  assert(access);
+  access->next = NULL;
+  access->read = Acc->isRead();
+  access->write = Acc->isWrite();
+  access->access = Acc->getAccessRelation();
+  access->tagged_access = access_get_tagged_may_access(Acc);
+  access->exact_write = /*Acc->isWrite()*/ true;
+  const void *Instr = (const void *)Acc->getAccessInstruction();
+  access->ref_id = isl_id_alloc(ctx, nullptr, const_cast<void *>(Instr));
+  access->group = -1;
+
+  *next_access = access;
+  next_access = &(*next_access)->next;
+  return next_access;
+}
+
+static struct gpu_stmt_access **
+expr_extract_accesses(ScopStmt *Stmt, struct gpu_stmt_access **next_access) {
+  for (MemoryAccess *Acc : *Stmt)
+    next_access = expr_extract_access(Acc, next_access);
+
+  return next_access;
+}
+
 /* Extract a gpu_stmt_access from "expr", append it to the list
  * that ends in *data->next_access and update the end of the list.
  * If the access expression performs a write, then it is considered
@@ -5779,13 +5831,14 @@ static int extract_access(__isl_keep pet_expr *expr, void *user)
  */
 static void pet_stmt_extract_accesses(struct gpu_stmt *stmt)
 {
-	struct ppcg_extract_access_data data;
-
+	//struct ppcg_extract_access_data data;
+	struct gpu_stmt_access **next_access = &stmt->accesses;
 	stmt->accesses = NULL;
-	data.next_access = &stmt->accesses;
-	//data.single_expression =
-	//	pet_tree_get_type(stmt->stmt->body) == pet_tree_expr;
-	// pet_tree_foreach_access_expr(stmt->stmt->body, &extract_access, &data);
+	expr_extract_accesses(stmt->stmt, next_access);
+	// data.single_expression =
+	// 	pet_tree_get_type(stmt->stmt->body) == pet_tree_expr;
+	// pet_tree_foreach_access_expr(stmt->stmt->body, &extract_access,
+	// &data);
 }
 
 /* Return an array of gpu_stmt representing the statements in "scop".
