@@ -8,6 +8,10 @@
 
 #include "ppcg_options.h"
 
+namespace polly {
+  class ScopStmt;
+}
+
 const char *ppcg_base_name(const char *filename);
 int ppcg_extract_base_name(char *name, const char *input);
 
@@ -97,7 +101,7 @@ struct ppcg_scop {
 	int n_array;
 	struct pet_array **arrays;
 	int n_stmt;
-	struct pet_stmt **stmts;
+	polly::ScopStmt **stmts;
 	int n_independence;
 	struct pet_independence **independences;
 };
