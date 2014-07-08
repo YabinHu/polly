@@ -177,7 +177,8 @@ configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/include/polly/Config/config.h.cmake
 # Add target to check formatting of polly files
 file( GLOB_RECURSE files *.h *.cpp)
 file( GLOB_RECURSE jsonfiles lib/JSON/*.h lib/JSON/*.cpp)
-list( REMOVE_ITEM files ${jsonfiles} )
+file( GLOB_RECURSE ppcgfiles lib/CodeGen/GPGPU/*.h lib/CodeGen/GPGPU/*.cpp)
+list( REMOVE_ITEM files ${jsonfiles} ${ppcgfiles})
 add_custom_command( OUTPUT formatting COMMAND
   CLANG_FORMAT=${LLVM_BINARY_DIR}/bin/clang-format
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/check_format.sh ${files})
