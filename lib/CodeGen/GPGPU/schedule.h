@@ -32,7 +32,7 @@ struct gpu_stmt_access {
 
 struct gpu_stmt {
 	isl_id *id;
-	struct pet_stmt *stmt;
+        struct pet_stmt *stmt;
 
 	/* Number of tile dimensions. */
 	int tile_len;
