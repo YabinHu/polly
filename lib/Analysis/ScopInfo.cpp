@@ -308,6 +308,7 @@ static MemoryAccess::ReductionType getReductionType(const BinaryOperator *BinOp,
 MemoryAccess::~MemoryAccess() {
   isl_map_free(AccessRelation);
   isl_map_free(newAccessRelation);
+  isl_id_free(Id);
 }
 
 static void replace(std::string &str, const std::string &find,
@@ -479,6 +480,10 @@ MemoryAccess::MemoryAccess(const IRAccess &Access, const Instruction *AccInst,
 void MemoryAccess::realignParams() {
   isl_space *ParamSpace = Statement->getParent()->getParamSpace();
   AccessRelation = isl_map_align_params(AccessRelation, ParamSpace);
+}
+
+__isl_give isl_id *MemoryAccess::getRefID() const {
+    return isl_id_copy(Id);
 }
 
 MemoryAccess::MemoryAccess(const Value *BaseAddress, ScopStmt *Statement)

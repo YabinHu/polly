@@ -140,6 +140,9 @@ private:
   /// Updated access relation read from JSCOP file.
   isl_map *newAccessRelation;
 
+  /// A isl_id used to tag the access
+  isl_id *Id;
+
   void assumeNoOutOfBound(const IRAccess &Access);
 
 public:
@@ -233,6 +236,12 @@ public:
 
   /// @brief Align the parameters in the access relation to the scop context
   void realignParams();
+
+  /// @brief Get ref_id.
+  __isl_give isl_id *getRefID() const;
+
+  /// @brief Get ref_id.
+  void setRefID(__isl_take isl_id *_Id) { Id = _Id; }
 
   /// @brief Print the MemoryAccess.
   ///
