@@ -10,6 +10,9 @@
  * and Ecole Normale Superieure, 45 rue d'Ulm, 75230 Paris, France
  */
 
+#include "llvm/IR/GlobalVariable.h"
+#include "llvm/Support/FormattedStream.h"
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +29,8 @@
 // #include "cuda.h"
 // #include "opencl.h"
 // #include "cpu.h"
+
+using namespace polly;
 
 struct options {
 	struct isl_options *isl;
@@ -182,6 +187,7 @@ static int check_call(__isl_keep pet_expr *expr, void *user)
 
 /* Does "stmt" contain any call expressions?
  */
+#if 0
 static int has_call(struct pet_stmt *stmt)
 {
 	int has_call = 0;
@@ -192,13 +198,47 @@ static int has_call(struct pet_stmt *stmt)
 
 	return has_call;
 }
+#endif
+
+static bool hasCall(ScopStmt *Stmt) {
+  BasicBlock *BB = Stmt->getBasicBlock();
+  for (BasicBlock::iterator I = BB->begin(), E = BB->end(); I != E; ++I) {
+    Instruction *Inst = &(*I);
+    if (CallInst *CI = dyn_cast<CallInst>(Inst))
+      return true;
+  }
+
+  return false;
+}
 
 /* Collect the iteration domains of the statements in "scop"
  * that contain a call expression.
  */
+#if 0
 static __isl_give isl_union_set *collect_call_domains(struct pet_scop *scop)
 {
 	return collect_domains(scop, &has_call);
+}
+#endif
+
+static __isl_give isl_union_set *collect_call_domains(Scop *S) {
+  isl_union_set *Domain;
+  isl_set *Domain_i;
+
+  if (!S)
+    return NULL;
+
+  isl_set *Context = S->getContext();
+  Domain = isl_union_set_empty(isl_set_get_space(Context));
+
+  for (ScopStmt *Stmt : *S)
+    if (hasCall(Stmt)) {
+      Domain_i = Stmt->getDomain();
+      Domain = isl_union_set_add_set(Domain, Domain_i);
+    }
+
+  isl_set_free(Context);
+  return Domain;
 }
 
 /* Given a union of "tagged" access relations of the form
@@ -571,6 +611,199 @@ static __isl_give isl_set *set_intersect_str(__isl_take isl_set *set,
 	return set;
 }
 
+static int getNumberOfScopStmts(polly::Scop *S) {
+  int N = 0;
+  for (ScopStmt *Stmt : *S)
+    N++;
+
+  return N;
+}
+
+static ScopStmt **extractScopStmts(polly::Scop *S) {
+  int n = getNumberOfScopStmts(S);
+  ScopStmt **Res = (ScopStmt **)malloc(n * sizeof(ScopStmt *));
+
+  int K = 0;
+  for (ScopStmt *Stmt : *S) {
+    Res[K] = Stmt;
+    K++;
+  }
+
+  return Res;
+}
+
+/* Get the number of the arrays by counting different base address of the
+ * memory accesses.
+ */
+static int getNumberOfArrays(polly::Scop *S,
+                             std::set<const llvm::Value *> &Bases) {
+  for (ScopStmt *Stmt : *S) {
+    for (MemoryAccess *Acc : *Stmt) {
+      const Value *BaseAddr = Acc->getBaseAddr();
+      if (Bases.find(BaseAddr) == Bases.end())
+        Bases.insert(BaseAddr);
+    }
+  }
+
+  return Bases.size();
+}
+
+/* Set the size of index "pos" of "array" to "size".
+ * In particular, add a constraint of the form
+ *
+ *	i_pos < size
+ *
+ * to array->extent and a constraint of the form
+ *
+ *	size >= 0
+ *
+ * to array->context.
+ */
+static struct pet_array *update_size(struct pet_array *array, int pos,
+                                     __isl_take isl_pw_aff *size) {
+  isl_set *valid;
+  isl_set *univ;
+  isl_set *bound;
+  isl_space *dim;
+  isl_aff *aff;
+  isl_pw_aff *index;
+  isl_id *id;
+
+  valid = isl_pw_aff_nonneg_set(isl_pw_aff_copy(size));
+  array->context = isl_set_intersect(array->context, valid);
+
+  dim = isl_set_get_space(array->extent);
+  aff = isl_aff_zero_on_domain(isl_local_space_from_space(dim));
+  aff = isl_aff_add_coefficient_si(aff, isl_dim_in, pos, 1);
+  univ = isl_set_universe(isl_aff_get_domain_space(aff));
+  index = isl_pw_aff_alloc(univ, aff);
+
+  size = isl_pw_aff_add_dims(size, isl_dim_in,
+                             isl_set_dim(array->extent, isl_dim_set));
+  id = isl_set_get_tuple_id(array->extent);
+  size = isl_pw_aff_set_tuple_id(size, isl_dim_in, id);
+  bound = isl_pw_aff_lt_set(index, size);
+
+  array->extent = isl_set_intersect(array->extent, bound);
+
+  if (!array->context || !array->extent) {
+    free(array);
+    return NULL;
+  }
+
+  return array;
+}
+
+/* Extract an integer from "val", which assumed to be non-negative.
+ */
+static __isl_give isl_val *extract_unsigned(isl_ctx *ctx,
+                                            const llvm::APInt &val) {
+  unsigned n;
+  const uint64_t *data;
+
+  data = val.getRawData();
+  n = val.getNumWords();
+  return isl_val_int_from_chunks(ctx, n, sizeof(uint64_t), data);
+}
+
+/* Extract an affine expression from the APInt "val", which is assumed
+ * to be non-negative.
+ */
+static __isl_give isl_pw_aff *extract_affine(isl_ctx *ctx,
+                                             const llvm::APInt &val) {
+  isl_space *dim = isl_space_params_alloc(ctx, 0);
+  isl_local_space *ls = isl_local_space_from_space(isl_space_copy(dim));
+  isl_aff *aff = isl_aff_zero_on_domain(ls);
+  isl_set *dom = isl_set_universe(dim);
+  isl_val *v;
+
+  v = extract_unsigned(ctx, val);
+  aff = isl_aff_add_constant_val(aff, v);
+
+  return isl_pw_aff_alloc(dom, aff);
+}
+
+/* Figure out the size of the array at position "pos" and all
+ * subsequent positions from "type" and update "array" accordingly.
+ */
+static struct pet_array *set_upper_bounds(isl_ctx *ctx, struct pet_array *array,
+                                          const Type *type, int pos) {
+  const ArrayType *atype;
+  isl_pw_aff *size;
+
+  if (!array)
+    return NULL;
+
+  if (atype = dyn_cast<ArrayType>(type)) {
+    size = extract_affine(ctx, llvm::APInt(64, atype->getNumElements()));
+    array = update_size(array, pos, size);
+    type = atype->getElementType();
+    return set_upper_bounds(ctx, array, type, pos /*+ 1, update only 0*/);
+  } else
+    return array;
+}
+
+/* Extract or restore array information from Scop.
+ */
+static struct pet_array **
+extractArraysInfo(polly::Scop *S, std::set<const llvm::Value *> ArrayBases) {
+  unsigned N = ArrayBases.size();
+  if (N == 0)
+    return NULL;
+
+  struct pet_array **Arrays =
+      (struct pet_array **)malloc(N * sizeof(struct pet_array *));
+
+  if (!Arrays)
+    return NULL;
+
+  isl_ctx *Ctx = S->getIslCtx();
+
+  int J = 0;
+  for (const Value *BaseAddr : ArrayBases) {
+    struct pet_array *Arr =
+        (struct pet_array *)malloc(sizeof(struct pet_array));
+    if (!Arr)
+      return NULL;
+    Arrays[J] = Arr;
+
+    const GlobalVariable *GV = dyn_cast<const GlobalVariable>(BaseAddr);
+    ArrayType *ATy = dyn_cast<ArrayType>(GV->getType()->getElementType());
+    ArrayType *PTy = ATy;
+    ArrayType *EleTy;
+    while (EleTy = dyn_cast<ArrayType>(PTy->getElementType()))
+      PTy = EleTy;
+
+    void *Addr = const_cast<void *>((const void *)BaseAddr);
+    std::string AddrName = "MemRef_" + BaseAddr->getName().str();
+    isl_space *Dim = isl_space_set_alloc(Ctx, 0, 1 /*Depth, linearized*/);
+    Dim = isl_space_set_tuple_name(Dim, isl_dim_set, AddrName.c_str());
+    Arrays[J]->extent = isl_set_nat_universe(Dim);
+
+    Dim = isl_space_params_alloc(Ctx, 0);
+    Arrays[J]->context = isl_set_universe(Dim);
+
+    // Arrays[J] = set_upper_bounds(Ctx, Arrays[J], ATy, 0);
+    Arrays[J]->value_bounds = NULL;
+
+    std::string TypeName;
+    raw_string_ostream OS(TypeName);
+    ATy->getElementType()->print(OS);
+    TypeName = OS.str();
+    Arrays[J]->element_type = (char *)TypeName.c_str();
+    Arrays[J]->element_is_record = 0;
+    Arrays[J]->element_size =
+        ATy->getElementType()->getPrimitiveSizeInBits() / 8;
+    Arrays[J]->live_out = 0;
+    Arrays[J]->uniquely_defined = 0;
+    Arrays[J]->declared = 0;
+    Arrays[J]->exposed = 0;
+    J++;
+  }
+
+  return Arrays;
+}
+
 static void *ppcg_scop_free(struct ppcg_scop *ps)
 {
 	if (!ps)
@@ -603,12 +836,275 @@ static void *ppcg_scop_free(struct ppcg_scop *ps)
 	return NULL;
 }
 
+/* Tag the access relation "access" with "id".
+ * That is, insert the id as the range of a wrapped relation
+ * in the domain of "access".
+ *
+ * If "access" is of the form
+ *
+ *	D[i] -> A[a]
+ *
+ * then the result is of the form
+ *
+ *	[D[i] -> id[]] -> A[a]
+ */
+static __isl_give isl_map *tag_access(__isl_take isl_map *access,
+                                      __isl_take isl_id *id) {
+  isl_space *space;
+  isl_map *add_tag;
+
+  space = isl_space_range(isl_map_get_space(access));
+  space = isl_space_from_range(space);
+  space = isl_space_set_tuple_id(space, isl_dim_in, id);
+  add_tag = isl_map_universe(space);
+  access = isl_map_domain_product(access, add_tag);
+
+  return access;
+}
+
+static int NumRef = 0;
+
+/* Collect and return all read access relations (if "read" is set)
+ * and/or all write access relations (if "write" is set) in "stmt".
+ * If "tag" is set, then the access relations are tagged with
+ * the corresponding reference identifiers.
+ * If "kill" is set, then "stmt" is a kill statement and we simply
+ * add the argument of the kill operation.
+ *
+ * If "must" is set, then we only add the accesses that are definitely
+ * performed.  Otherwise, we add all potential accesses.
+ * In particular, if the statement has any arguments, then if "must" is
+ * set we currently skip the statement completely.  If "must" is not set,
+ * we project out the values of the statement arguments.
+ */
+static __isl_give isl_union_map *
+stmt_collect_accesses(ScopStmt *stmt, int read, int write, int kill, int must,
+                      int tag, __isl_take isl_space *dim) {
+  isl_union_map *accesses;
+  isl_set *domain;
+
+  if (!stmt)
+    return NULL;
+
+  accesses = isl_union_map_empty(dim);
+
+  if (must && stmt->/*n_arg*/ getNumParams() > 0)
+    return accesses;
+
+  domain = /*isl_set_copy(stmt->domain)*/ stmt->getDomain();
+  if (isl_set_is_wrapping(domain))
+    domain = isl_map_domain(isl_set_unwrap(domain));
+
+  /* comment out by Yabin Hu
+    if (kill)
+      accesses = expr_collect_access(stmt->body->args[0], tag, accesses,
+    domain);
+    else
+      accesses = expr_collect_accesses(stmt->body, read, write, must, tag,
+                                       accesses, domain);
+  */
+  isl_map *Access = nullptr;
+
+  for (MemoryAccess *Acc : *stmt) {
+    if ((read && Acc->isRead()) || (write && must && Acc->isMustWrite()) ||
+        (write && (must == 0) && Acc->isMayWrite())) {
+      isl_set *Domain = isl_set_copy(domain);
+      Access = Acc->getAccessRelation();
+      Access = isl_map_intersect_domain(Access, Domain);
+      if (tag) {
+        Access = tag_access(Access, Acc->getRefId());
+      }
+      accesses = isl_union_map_add_map(accesses, Access);
+    }
+  }
+
+  isl_set_free(domain);
+
+  return accesses;
+}
+
+/* Compute a mapping from all outer arrays (of structs) in scop
+ * to their innermost arrays.
+ *
+ * In particular, for each array of a primitive type, the result
+ * contains the identity mapping on that array.
+ * For each array involving member accesses, the result
+ * contains a mapping from the elements of the outer array of structs
+ * to all corresponding elements of the innermost nested arrays.
+ */
+static __isl_give isl_union_map *compute_to_inner(struct ppcg_scop *scop)
+{
+	int i;
+	isl_union_map *to_inner;
+
+	to_inner = isl_union_map_empty(isl_set_get_space(scop->context));
+
+	for (i = 0; i < scop->n_array; ++i) {
+		struct pet_array *array = scop->arrays[i];
+		isl_set *set;
+		isl_map *map;
+
+		if (array->element_is_record)
+			continue;
+
+		set = isl_set_copy(array->extent);
+		map = isl_set_identity(isl_set_copy(set));
+
+		while (set && isl_set_is_wrapping(set)) {
+			isl_id *id;
+			isl_map *wrapped;
+
+			id = isl_set_get_tuple_id(set);
+			wrapped = isl_set_unwrap(set);
+			wrapped = isl_map_domain_map(wrapped);
+			wrapped = isl_map_set_tuple_id(wrapped, isl_dim_in, id);
+			map = isl_map_apply_domain(map, wrapped);
+			set = isl_map_domain(isl_map_copy(map));
+		}
+
+		map = isl_map_gist_domain(map, set);
+
+		to_inner = isl_union_map_add_map(to_inner, map);
+	}
+
+	return to_inner;
+}
+
+/* Collect and return all read access relations (if "read" is set)
+ * and/or all write access relations (if "write" is set) in "scop".
+ * If "kill" is set, then we only add the arguments of kill operations.
+ * If "must" is set, then we only add the accesses that are definitely
+ * performed.  Otherwise, we add all potential accesses.
+ * If "tag" is set, then the access relations are tagged with
+ * the corresponding reference identifiers.
+ * For accesses to structures, the returned access relation accesses
+ * all individual fields in the structures.
+ */
+static __isl_give isl_union_map *scop_collect_accesses(struct ppcg_scop *scop,
+                                                       int read, int write,
+                                                       int kill, int must,
+                                                       int tag) {
+  int i;
+  isl_union_map *accesses;
+  isl_union_set *arrays;
+  isl_union_map *to_inner;
+
+  if (!scop)
+    return NULL;
+
+  accesses = isl_union_map_empty(isl_set_get_space(scop->context));
+
+  for (i = 0; i < scop->n_stmt; ++i) {
+    ScopStmt *stmt = scop->stmts[i];
+    isl_union_map *accesses_i;
+    isl_space *space;
+
+    // Comment by Yabin Hu
+    // If kill is set, we collect nothing.
+    if (kill /*&& !is_kill(stmt)*/)
+      continue;
+
+    space = isl_set_get_space(scop->context);
+    accesses_i =
+        stmt_collect_accesses(stmt, read, write, kill, must, tag, space);
+    accesses = isl_union_map_union(accesses, accesses_i);
+  }
+
+  arrays = isl_union_set_empty(isl_union_map_get_space(accesses));
+  for (i = 0; i < scop->n_array; ++i) {
+    isl_set *extent = isl_set_copy(scop->arrays[i]->extent);
+    arrays = isl_union_set_add_set(arrays, extent);
+  }
+  accesses = isl_union_map_intersect_range(accesses, arrays);
+
+  to_inner = compute_to_inner(scop);
+  accesses = isl_union_map_apply_range(accesses, to_inner);
+
+  return accesses;
+}
+
+/* Collect all potential read access relations.
+ */
+static __isl_give isl_union_map *
+pet_scop_collect_may_reads(struct ppcg_scop *scop) {
+  return scop_collect_accesses(scop, 1, 0, 0, 0, 0);
+}
+
+/* Collect all potential write access relations.
+ */
+static __isl_give isl_union_map *
+pet_scop_collect_may_writes(struct ppcg_scop *scop) {
+  return scop_collect_accesses(scop, 0, 1, 0, 0, 0);
+}
+
+/* Collect all definite write access relations.
+ */
+static __isl_give isl_union_map *
+pet_scop_collect_must_writes(struct ppcg_scop *scop) {
+  return scop_collect_accesses(scop, 0, 1, 0, 1, 0);
+}
+
+/* Collect all definite kill access relations.
+ */
+static __isl_give isl_union_map *
+pet_scop_collect_must_kills(struct ppcg_scop *scop) {
+  return scop_collect_accesses(scop, 0, 0, 1, 1, 0);
+}
+
+/* Collect all tagged potential read access relations.
+ */
+static __isl_give isl_union_map *
+pet_scop_collect_tagged_may_reads(struct ppcg_scop *scop) {
+  return scop_collect_accesses(scop, 1, 0, 0, 0, 1);
+}
+
+/* Collect all tagged potential write access relations.
+ */
+static __isl_give isl_union_map *
+pet_scop_collect_tagged_may_writes(struct ppcg_scop *scop) {
+  return scop_collect_accesses(scop, 0, 1, 0, 0, 1);
+}
+
+/* Collect all tagged definite write access relations.
+ */
+static __isl_give isl_union_map *
+pet_scop_collect_tagged_must_writes(struct ppcg_scop *scop) {
+  return scop_collect_accesses(scop, 0, 1, 0, 1, 1);
+}
+
+/* Collect all tagged definite kill access relations.
+ */
+__isl_give isl_union_map *
+pet_scop_collect_tagged_must_kills(struct ppcg_scop *scop) {
+  return scop_collect_accesses(scop, 0, 0, 1, 1, 1);
+}
+
+static __isl_give isl_union_map *collectSchedule(Scop *S) {
+  isl_union_map *Schedule;
+
+  if (!S)
+    return NULL;
+
+  Schedule = isl_union_map_empty(S->getParamSpace());
+
+  for (ScopStmt *Stmt : *S) {
+    isl_map *StmtSchedule = Stmt->getScattering();
+
+    StmtSchedule = isl_map_intersect_domain(StmtSchedule, Stmt->getDomain());
+    Schedule =
+        isl_union_map_union(Schedule, isl_union_map_from_map(StmtSchedule));
+  }
+
+  return Schedule;
+}
+
 /* Extract a ppcg_scop from a pet_scop.
  *
  * The constructed ppcg_scop refers to elements from the pet_scop
  * so the pet_scop should not be freed before the ppcg_scop.
  */
-static struct ppcg_scop *ppcg_scop_from_pet_scop(struct pet_scop *scop,
+struct ppcg_scop *
+ppcg_scop_from_pet_scop(/*struct pet_scop */Scop *scop,
 	struct ppcg_options *options)
 {
 	int i;
@@ -617,35 +1113,38 @@ static struct ppcg_scop *ppcg_scop_from_pet_scop(struct pet_scop *scop,
 
 	if (!scop)
 		return NULL;
-#if 0
-	ctx = isl_set_get_ctx(scop->context);
+
+	isl_set *Context = scop->getContext();
+        ctx = isl_set_get_ctx(Context);
 
 	ps = isl_calloc_type(ctx, struct ppcg_scop);
 	if (!ps)
 		return NULL;
 
 	ps->options = options;
-	ps->start = pet_loc_get_start(scop->loc);
-	ps->end = pet_loc_get_end(scop->loc);
-	ps->context = isl_set_copy(scop->context);
+	ps->start = /*pet_loc_get_start(scop->loc)*/0;
+	ps->end = /*pet_loc_get_end(scop->loc)*/0;
+	ps->context = /*isl_set_copy(*/Context;
 	ps->context = set_intersect_str(ps->context, options->ctx);
-	ps->domain = collect_non_kill_domains(scop);
+	ps->domain = /*collect_non_kill_domains(*/scop->getDomains();
 	ps->call = collect_call_domains(scop);
-	ps->tagged_reads = pet_scop_collect_tagged_may_reads(scop);
-	ps->reads = pet_scop_collect_may_reads(scop);
-	ps->tagged_may_writes = pet_scop_collect_tagged_may_writes(scop);
-	ps->may_writes = pet_scop_collect_may_writes(scop);
-	ps->tagged_must_writes = pet_scop_collect_tagged_must_writes(scop);
-	ps->must_writes = pet_scop_collect_must_writes(scop);
-	ps->tagged_must_kills = pet_scop_collect_tagged_must_kills(scop);
-	ps->schedule = pet_scop_collect_schedule(scop);
-	ps->n_type = scop->n_type;
-	ps->types = scop->types;
-	ps->n_array = scop->n_array;
-	ps->arrays = scop->arrays;
-	ps->n_stmt = scop->n_stmt;
-	ps->stmts = scop->stmts;
-	ps->n_independence = scop->n_independence;
+	ps->tagged_reads = pet_scop_collect_tagged_may_reads(ps);
+	ps->reads = pet_scop_collect_may_reads(ps);
+	ps->tagged_may_writes = pet_scop_collect_tagged_may_writes(ps);
+	ps->may_writes = pet_scop_collect_may_writes(ps);
+	ps->tagged_must_writes = pet_scop_collect_tagged_must_writes(ps);
+	ps->must_writes = pet_scop_collect_must_writes(ps);
+	ps->tagged_must_kills = pet_scop_collect_tagged_must_kills(ps);
+	ps->schedule = collectSchedule(scop);
+	// ps->n_type = scop->n_type;
+	// ps->types = scop->types;
+        std::set<const llvm::Value *> ArrayBases;
+        ps->n_array = getNumberOfArrays(scop, ArrayBases);
+	ps->arrays = extractArraysInfo(scop, ArrayBases);
+	ps->n_stmt = getNumberOfScopStmts(scop);
+	ps->stmts = extractScopStmts(scop);
+#if 0
+        ps->n_independence = scop->n_independence;
 	ps->independences = scop->independences;
 	ps->independence = isl_union_map_empty(isl_set_get_space(ps->context));
 	for (i = 0; i < ps->n_independence; ++i)
@@ -696,7 +1195,7 @@ static __isl_give isl_printer *transform(__isl_take isl_printer *p,
 	}
 
 	scop = pet_scop_align_params(scop);
-	ps = ppcg_scop_from_pet_scop(scop, data->options);
+	// ps = ppcg_scop_from_pet_scop(scop, data->options);
 
 	p = data->transform(p, ps, data->user);
 
