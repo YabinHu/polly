@@ -106,7 +106,8 @@ struct ppcg_scop {
 	int n_independence;
 	struct pet_independence **independences;
 };
-
+__isl_give isl_map *tag_access(__isl_take isl_map *access,
+                               __isl_take isl_id *id);
 int ppcg_transform(isl_ctx *ctx, const char *input, FILE *out,
 	struct ppcg_options *options,
 	__isl_give isl_printer *(*fn)(__isl_take isl_printer *p,
