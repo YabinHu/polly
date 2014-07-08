@@ -102,9 +102,10 @@ struct ppcg_scop {
 	struct pet_independence **independences;
 };
 
-int ppcg_transform(isl_ctx *ctx, const char *input, FILE *out,
-	struct ppcg_options *options,
-	__isl_give isl_printer *(*fn)(__isl_take isl_printer *p,
-		struct ppcg_scop *scop, void *user), void *user);
+void ppcg_cleanup(struct pet_scop *scop, struct ppcg_scop *ps);
+int ppcg_transform(/*isl_ctx *ctx, const char *input, FILE *out,*/
+	struct ppcg_options *options, struct pet_scop *scop,
+	/*__isl_give isl_printer *(*fn)(__isl_take isl_printer *p,*/
+	struct ppcg_scop *ps/*, void *user), void *user*/);
 
 #endif
