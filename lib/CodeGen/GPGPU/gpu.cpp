@@ -840,7 +840,7 @@ static void set_used_sizes(struct gpu_gen *gen, const char *type, int id,
 	isl_space *space;
 	isl_map *map;
 
-	if (!gen->options->debug->dump_sizes)
+	if (/*!gen->options->debug->dump_sizes*/true)
 		return;
 
 	space = isl_union_map_get_space(gen->used_sizes);
