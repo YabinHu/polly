@@ -1128,6 +1128,11 @@ ppcg_scop_from_pet_scop(/*struct pet_scop */Scop *scop,
 	ps->context = set_intersect_str(ps->context, options->ctx);
 	ps->domain = /*collect_non_kill_domains(*/scop->getDomains();
 	ps->call = collect_call_domains(scop);
+	std::set<const llvm::Value *> ArrayBases;
+	ps->n_array = getNumberOfArrays(scop, ArrayBases);
+	ps->arrays = extractArraysInfo(scop, ArrayBases);
+	ps->n_stmt = getNumberOfScopStmts(scop);
+	ps->stmts = extractScopStmts(scop);
 	ps->tagged_reads = pet_scop_collect_tagged_may_reads(ps);
 	ps->reads = pet_scop_collect_may_reads(ps);
 	ps->tagged_may_writes = pet_scop_collect_tagged_may_writes(ps);
@@ -1138,11 +1143,6 @@ ppcg_scop_from_pet_scop(/*struct pet_scop */Scop *scop,
 	ps->schedule = collectSchedule(scop);
 	// ps->n_type = scop->n_type;
 	// ps->types = scop->types;
-        std::set<const llvm::Value *> ArrayBases;
-        ps->n_array = getNumberOfArrays(scop, ArrayBases);
-	ps->arrays = extractArraysInfo(scop, ArrayBases);
-	ps->n_stmt = getNumberOfScopStmts(scop);
-	ps->stmts = extractScopStmts(scop);
 #if 0
         ps->n_independence = scop->n_independence;
 	ps->independences = scop->independences;
