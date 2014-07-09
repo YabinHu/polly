@@ -5929,7 +5929,7 @@ static __isl_give isl_printer *print_gpu(__isl_take isl_printer *p, void *user)
  */
 static /*__isl_give isl_printer **/ int generate(/*__isl_take isl_printer *p,*/
 	isl_ctx *ctx, struct gpu_gen *gen, struct ppcg_scop *scop,
-	struct ppcg_options *options)
+	struct ppcg_options *options, struct gen_ext *ext)
 {
 	struct gpu_prog *prog;
 	// isl_ctx *ctx;
@@ -5945,6 +5945,8 @@ static /*__isl_give isl_printer **/ int generate(/*__isl_take isl_printer *p,*/
 
 	context = isl_set_copy(prog->context);
 	guard = isl_union_set_params(isl_union_set_copy(prog->scop->domain));
+        ext->context = context;
+        ext->guard = guard;
 	prog->context = isl_set_intersect(prog->context, isl_set_copy(guard));
 
 	gen->prog = prog;
@@ -5958,14 +5960,16 @@ static /*__isl_give isl_printer **/ int generate(/*__isl_take isl_printer *p,*/
 	//} else {
 		compute_copy_in_and_out(gen);
 		gen->tree = generate_host_code(gen);
+                ext->tree = gen->tree;
+                ext->prog = gen->prog;
 	//	p = ppcg_print_exposed_declarations(p, prog->scop);
 	//	p = ppcg_print_guarded(p, guard, context, &print_gpu, gen);
 	//	isl_ast_node_free(gen->tree);
 	//}
 
-	//isl_union_map_free(gen->sched);
+	isl_union_map_free(gen->sched);
 
-	//gpu_prog_free(prog);
+	// gpu_prog_free(prog);
 
 	return /*p*/ 0;
 }
@@ -5977,7 +5981,6 @@ static void ppcg_print_guard() {
 
 static void gpu_gen_free(struct gpu_gen *gen) {
   isl_ast_node_free(gen->tree);
-  isl_union_map_free(gen->sched);
   gpu_prog_free(gen->prog);
 }
 
@@ -5997,8 +6000,9 @@ static __isl_give isl_printer *generate_wrap(__isl_take isl_printer *p,
  * all scops by corresponding GPU code and write the results to "out".
  */
 int generate_gpu(isl_ctx *ctx, /*const char *input, FILE *out,*/
-	struct ppcg_scop *scop, struct ppcg_options *options /*,
-	__isl_give isl_printer *(*print)(__isl_take isl_printer *p,
+	struct ppcg_scop *scop, struct ppcg_options *options ,
+	struct gen_ext *ext
+	/*__isl_give isl_printer *(*print)(__isl_take isl_printer *p,
 		struct gpu_prog *prog, __isl_keep isl_ast_node *tree,
 		struct gpu_types *types, void *user), void *user*/)
 {
@@ -6021,7 +6025,7 @@ int generate_gpu(isl_ctx *ctx, /*const char *input, FILE *out,*/
 	}
 
 	// r = ppcg_transform(ctx, input, out, options, &generate_wrap, &gen);
-        r = generate(ctx, &gen, scop, options);
+        r = generate(ctx, &gen, scop, options, ext);
 
 	if (options->debug->dump_sizes) {
 		isl_union_map_dump(gen.used_sizes);
