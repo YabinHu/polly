@@ -1,0 +1,216 @@
+#ifndef POLLY_CODEGEN_ISL_PTX_GENERATOR_H
+#define POLLY_CODEGEN_ISL_PTX_GENERATOR_H
+
+#include "polly/Config/config.h"
+
+#ifdef GPU_CODEGEN
+#include "polly/CodeGen/IRBuilder.h"
+#include "llvm/ADT/SetVector.h"
+
+#include "isl/ast.h"
+#include "isl/map.h"
+#include "isl/set.h"
+//#include <isl/id_to_ast_expr.h>
+
+#include <map>
+
+namespace llvm {
+class Value;
+class Pass;
+class BasicBlock;
+}
+
+struct gpu_array_ref_group;
+struct gpu_prog;
+struct isl_ctx;
+struct isl_ast_node;
+struct isl_ast_expr;
+struct isl_ast_build;
+struct ppcg_kernel;
+struct ppcg_options;
+struct ppcg_scop;
+
+namespace polly {
+using namespace llvm;
+
+class Scop;
+class ScopStmt;
+
+class IslPTXGenerator {
+public:
+  typedef std::map<Value *, Value *> ValueToValueMapTy;
+
+  IslPTXGenerator(PollyIRBuilder &Builder, Pass *P, const std::string &Triple,
+                  struct ppcg_options *Opt);
+
+  ~IslPTXGenerator();
+
+  /// @brief Get the generated isl AST for GPGPU.
+  __isl_give isl_ast_node *getOutputAST() { return isl_ast_node_copy(Tree); }
+
+  /// @brief Create PTX kernel function in LLVM IR format.
+
+  /// @brief Create a GPGPU parallel loop.
+  ///
+  /// @param VMap         This map is filled by createParallelLoop(). It
+  ///                     maps the values in UsedValues to Values through which
+  ///                     their content is available within the loop body.
+  /// @param KernelBody   A pointer to an iterator that is set to point to the
+  ///                     body of the created loop. It should be used to insert
+  ///                     instructions that form the actual loop body.
+  void startGeneration(ValueToValueMapTy &VMap,
+                       BasicBlock::iterator *KernelBody);
+
+  /// @brief Execute the post-operations to build a GPGPU parallel loop.
+  ///
+  /// @param Subfunction The kernel function in LLVM-IR.
+  void finishGeneration(Function *SubFunction);
+
+  /// @brief Set the size of the output array.
+  ///
+  /// This size is used to allocate memory on the device and the host.
+  ///
+  /// @param Bytes        Output array size in bytes.
+  void setOutputBytes(unsigned Bytes) { OutputBytes = Bytes; }
+
+  /// @brief Get struct ppcg_kernel *Kernel.
+  ///
+  struct ppcg_kernel *getGPUKernel() { return Kernel; }
+
+  /// @brief Set the parameters for launching PTX kernel.
+  ///
+  void setLaunchingParameters(struct ppcg_kernel *Kernel);
+
+private:
+  PollyIRBuilder &Builder;
+  Pass *P;
+
+  /// @brief The target triple of the device.
+  const std::string &GPUTriple;
+
+  /// @brief Options for GPGPU code generation.
+  struct ppcg_options *Options;
+
+  /// @brief Parameters used for launching PTX kernel.
+  int GridWidth, GridHeight, BlockWidth, BlockHeight;
+
+  /// @brief Size of the output array in bytes.
+  unsigned OutputBytes;
+
+  /// @brief Internal representation of a Scop for GPGPU code generation.
+  struct ppcg_scop *Scop;
+
+  /// @brief The generated GPU kernel.
+  struct ppcg_kernel *Kernel;
+
+  /// @brief The generated AST.
+  isl_ast_node *Tree;
+
+  /// @brief Original Schedule.
+  isl_union_map *Sched;
+
+  /// @brief Information about the current program.
+  struct gpu_prog *Prog;
+
+  /// @brief Build the internal scop.
+  void buildScop();
+
+  /// @brief Cleanup resources in scop.
+  void freeScop();
+
+  /// @brief Build the generated gpu kernel.
+  void buildGPUKernel();
+
+  Module *getModule();
+
+  polly::Scop *getPollyScop();
+
+  isl_ctx *getIslCtx();
+
+  /// @brief Polly's GPU data types.
+  StructType *ContextTy, *ModuleTy, *KernelTy, *DeviceTy, *DevDataTy, *EventTy;
+
+  void initializeGPUDataTypes();
+  IntegerType *getInt64Type();           // i64
+  PointerType *getI8PtrType();           // char *
+  PointerType *getPtrI8PtrType();        // char **
+  PointerType *getFloatPtrType();        // float *
+  PointerType *getGPUContextPtrType();   // %struct.PollyGPUContextT *
+  PointerType *getGPUModulePtrType();    // %struct.PollyGPUModuleT *
+  PointerType *getGPUDevicePtrType();    // %struct.PollyGPUDeviceT *
+  PointerType *getPtrGPUDevicePtrType(); // %struct.PollyGPUDevicePtrT *
+  PointerType *getGPUFunctionPtrType();  // %struct.PollyGPUFunctionT *
+  PointerType *getGPUEventPtrType();     // %struct.PollyGPUEventT *
+
+  /// @brief Create the kernel string containing LLVM IR.
+  ///
+  /// @param SubFunction  A pointer to the device code function.
+  /// @return             A global string variable containing the LLVM IR codes
+  //                      of the SubFunction.
+  Value *createPTXKernelFunction(Function *SubFunction);
+
+  /// @brief Get the entry name of the device kernel function.
+  ///
+  /// @param SubFunction  A pointer to the device code function.
+  /// @return             A global string variable containing the entry name of
+  ///                     the SubFunction.
+  Value *getPTXKernelEntryName(Function *SubFunction);
+
+  void createCallInitDevice(Value *Context, Value *Device);
+  void createCallGetPTXModule(Value *Buffer, Value *Module);
+  void createCallGetPTXKernelEntry(Value *Entry, Value *Module, Value *Kernel);
+  void createCallAllocateMemoryForDevice(Value *DeviceData, Value *Size);
+  void createCallCopyFromHostToDevice(Value *DeviceData, Value *HostData,
+                                      Value *Size);
+  void createCallCopyFromDeviceToHost(Value *HostData, Value *DeviceData,
+                                      Value *Size);
+  void createCallSetKernelParameters(Value *Kernel, Value *BlockWidth,
+                                     Value *BlockHeight, Value *DeviceData,
+                                     Value *ParamOffset);
+  void createCallLaunchKernel(Value *Kernel, Value *GridWidth,
+                              Value *GridHeight);
+  void createCallStartTimerByCudaEvent(Value *StartEvent, Value *StopEvent);
+  void createCallStopTimerByCudaEvent(Value *StartEvent, Value *StopEvent,
+                                      Value *Timer);
+  void createCallCleanupGPGPUResources(Value *DeviceData, Value *Module,
+                                       Value *Context, Value *Kernel,
+                                       Value *Device);
+
+  /// @brief Create the CUDA subfunction.
+  ///
+  /// @param VMap         This map that is filled by createSubfunction(). It
+  ///                     maps the values in UsedValues to Values through which
+  ///                     their content is available within the loop body.
+  /// @param SubFunction  The newly created SubFunction is returned here.
+  void createSubfunction(ValueToValueMapTy &VMap, Function **Subfunction);
+
+  /// @brief Create the definition of the CUDA subfunction.
+  /// @param NumMemAccs   The number of memory accesses which will be copied
+  //                      from host to device.
+  /// @param NumArgs      The number of parameters of this scop.
+  Function *createSubfunctionDefinition(int NumMemAccs, int NumArgs);
+
+  /// @brief Get the Value of CUDA block width.
+  Value *getCUDABlockWidth();
+
+  /// @brief Get the Value of CUDA block height.
+  Value *getCUDABlockHeight();
+
+  /// @brief Get the Value of CUDA Gird width.
+  Value *getCUDAGridWidth();
+
+  /// @brief Get the Value of CUDA grid height.
+  Value *getCUDAGridHeight();
+
+  /// @brief Get the Value of the bytes of the output array.
+  Value *getOutputArraySizeInBytes();
+
+  /// @brief Erase the ptx-related subfunctions and declarations.
+  ///
+  /// @param SubFunction  A pointer to the device code function.
+  void eraseUnusedFunctions(Function *SubFunction);
+};
+} // end namespace polly
+
+#endif /* GPU_CODEGEN */
+#endif /* POLLY_CODEGEN_ISL_PTX_GENERATOR_H */

@@ -25,7 +25,8 @@ if (GPU_CODEGEN)
        CodeGen/PTXGenerator.cpp
        CodeGen/GPGPU/ppcg.cpp
        CodeGen/GPGPU/gpu.cpp
-       CodeGen/GPGPU/schedule.cpp)
+       CodeGen/GPGPU/schedule.cpp
+       CodeGen/GPGPU/IslPTXGenerator.cpp)
 endif (GPU_CODEGEN)
 
 if (SCOPLIB_FOUND)
