@@ -22,6 +22,7 @@
 #include "polly/CodeGen/BlockGenerators.h"
 #include "polly/CodeGen/CodeGeneration.h"
 #include "polly/CodeGen/IslAst.h"
+#include "polly/CodeGen/IslPTXGenerator.h"
 #include "polly/CodeGen/LoopGenerators.h"
 #include "polly/CodeGen/Utils.h"
 #include "polly/Dependences.h"
@@ -47,6 +48,7 @@
 #include "isl/aff.h"
 
 #include <map>
+#include "./GPGPU/ppcg_options.h"
 
 using namespace polly;
 using namespace llvm;
@@ -1143,12 +1145,37 @@ public:
     simplifyRegion(&S, this);
 
     BasicBlock *StartBlock = executeScopConditionally(S, this);
+#ifdef GPU_CODEGEN
+    struct ppcg_options *Options =
+        (struct ppcg_options *)malloc(sizeof(struct ppcg_options));
+    Options->scale_tile_loops = false;
+    Options->wrap = false;
+    Options->ctx = nullptr;
+    Options->sizes = nullptr;
+    Options->tile_size = 32;
+    Options->use_private_memory = true;
+    Options->use_shared_memory = true;
+    Options->max_shared_memory = 8192;
+    Options->target = 0; /* ptx codegen */
+    Options->openmp = 0;
+    Options->linearize_device_arrays = false;
+    Options->live_range_reordering = false;
+    Options->opencl_compiler_options = nullptr;
+    Options->opencl_use_gpu = 0;
+    const std::string Triple = "nvptx64-unknown-unknown";
+    errs() << "hello ptx code generator.\n";
+#else
     isl_ast_node *Ast = AstInfo.getAst();
+#endif
     LoopAnnotator Annotator;
     PollyIRBuilder Builder(StartBlock->getContext(), llvm::ConstantFolder(),
                            polly::IRInserter(Annotator));
     Builder.SetInsertPoint(StartBlock->begin());
-
+#ifdef GPU_CODEGEN
+    IslPTXGenerator PTXGen(Builder, this, Triple, Options);
+    isl_ast_node *Ast = PTXGen.getOutputAST();
+    isl_ast_node_dump(Ast);
+#endif
     IslNodeBuilder NodeBuilder(Builder, Annotator, this);
 
     Builder.SetInsertPoint(StartBlock->getSinglePredecessor()->begin());
@@ -1164,7 +1191,7 @@ public:
     Branch->setCondition(V);
     Builder.SetInsertPoint(StartBlock->begin());
 
-    NodeBuilder.create(Ast);
+    //NodeBuilder.create(Ast);
     return true;
   }
 
