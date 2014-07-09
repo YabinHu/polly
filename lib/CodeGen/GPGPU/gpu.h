@@ -7,6 +7,8 @@
 #include "ppcg.h"
 #include "ppcg_options.h"
 
+struct gpu_prog;
+
 struct gen_ext {
   isl_set *context;
   isl_set *guard;
