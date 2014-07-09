@@ -5897,7 +5897,7 @@ __isl_give /*isl_printer */isl_ast_node *ppcg_print_guarded(
 	isl_union_map *schedule;
 	isl_ast_build *build;
 	isl_ast_node *tree;
-	isl_ast_print_options *options;
+	// isl_ast_print_options *options;
 
 	// ctx = isl_printer_get_ctx(p);
 	guard = isl_set_from_params(guard);
