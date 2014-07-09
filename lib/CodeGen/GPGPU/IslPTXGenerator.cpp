@@ -72,7 +72,7 @@ IslPTXGenerator::IslPTXGenerator(PollyIRBuilder &Builder, Pass *P,
                                  const std::string &Triple,
                                  struct ppcg_options *Opt)
     : Builder(Builder), P(P), GPUTriple(Triple), Options(Opt), Tree(nullptr),
-      Prog(nullptr), Guard(nullptr) {
+      Prog(nullptr), Context(nullptr), Guard(nullptr) {
 
   buildScop();
   buildGPUKernel();
@@ -82,6 +82,7 @@ IslPTXGenerator::IslPTXGenerator(PollyIRBuilder &Builder, Pass *P,
 IslPTXGenerator::~IslPTXGenerator() {
   isl_ast_node_free(Tree);
   gpu_prog_free(Prog);
+  isl_set_free(Context);
   isl_set_free(Guard);
   freeScop();
 }
@@ -166,6 +167,7 @@ void IslPTXGenerator::freeScop() {
 void IslPTXGenerator::buildGPUKernel() {
   isl_ctx *Ctx = getIslCtx();
   struct gen_ext ext;
+  ext.context = nullptr;
   ext.guard = nullptr;
   ext.tree = nullptr;
   ext.prog = nullptr;
@@ -173,6 +175,7 @@ void IslPTXGenerator::buildGPUKernel() {
     errs() << "GPGPU code geneation failed.\n";
     return;
   }
+  Context = ext.context;
   Guard = ext.guard;
   Tree = ext.tree;
   Prog = ext.prog;
