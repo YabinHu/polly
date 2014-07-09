@@ -1145,6 +1145,12 @@ ppcg_scop_from_pet_scop(/*struct pet_scop */Scop *scop,
 	ps->tagged_must_writes = pet_scop_collect_tagged_must_writes(ps);
 	ps->must_writes = pet_scop_collect_must_writes(ps);
 	ps->tagged_must_kills = pet_scop_collect_tagged_must_kills(ps);
+	ps->may_writes =
+            isl_union_map_union(ps->may_writes,
+                                isl_union_map_copy(ps->must_writes));
+	ps->tagged_may_writes =
+            isl_union_map_union(ps->tagged_may_writes,
+                                isl_union_map_copy(ps->tagged_must_writes));
 	ps->schedule = collectSchedule(scop);
 	// ps->n_type = scop->n_type;
 	// ps->types = scop->types;
