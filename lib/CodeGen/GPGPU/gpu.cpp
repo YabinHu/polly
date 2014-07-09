@@ -5764,8 +5764,7 @@ expr_extract_access(MemoryAccess *Acc, struct gpu_stmt_access **next_access) {
   access->access = Acc->getAccessRelation();
   access->tagged_access = access_get_tagged_may_access(Acc);
   access->exact_write = /*Acc->isWrite()*/ true;
-  const void *Instr = (const void *)Acc->getAccessInstruction();
-  access->ref_id = isl_id_alloc(ctx, nullptr, const_cast<void *>(Instr));
+  access->ref_id = Acc->getRefId();
   access->group = -1;
 
   *next_access = access;
