@@ -72,7 +72,7 @@ IslPTXGenerator::IslPTXGenerator(PollyIRBuilder &Builder, Pass *P,
                                  const std::string &Triple,
                                  struct ppcg_options *Opt)
     : Builder(Builder), P(P), GPUTriple(Triple), Options(Opt), Tree(nullptr),
-      Sched(nullptr), Prog(nullptr) {
+      Prog(nullptr), Guard(nullptr) {
 
   buildScop();
   buildGPUKernel();
@@ -81,8 +81,8 @@ IslPTXGenerator::IslPTXGenerator(PollyIRBuilder &Builder, Pass *P,
 
 IslPTXGenerator::~IslPTXGenerator() {
   isl_ast_node_free(Tree);
-  isl_union_map_free(Sched);
   gpu_prog_free(Prog);
+  isl_set_free(Guard);
   freeScop();
 }
 

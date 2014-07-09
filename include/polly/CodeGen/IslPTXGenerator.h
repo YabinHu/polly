@@ -106,11 +106,11 @@ private:
   /// @brief The generated AST.
   isl_ast_node *Tree;
 
-  /// @brief Original Schedule.
-  isl_union_map *Sched;
-
   /// @brief Information about the current program.
   struct gpu_prog *Prog;
+
+  /// @brief The if-like gurad of the host code.
+  isl_set *Guard;
 
   /// @brief Build the internal scop.
   void buildScop();
