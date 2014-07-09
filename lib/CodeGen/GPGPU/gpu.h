@@ -7,6 +7,13 @@
 #include "ppcg.h"
 #include "ppcg_options.h"
 
+struct gen_ext {
+  isl_set *context;
+  isl_set *guard;
+  isl_ast_node *tree;
+  struct gpu_prog *prog;
+};
+
 /* Represents an outer array possibly accessed by a gpu_prog.
  * If this outer array contains structures, then the references are not
  * collected and the reference groups are not computed.
