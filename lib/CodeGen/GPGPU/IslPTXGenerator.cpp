@@ -167,11 +167,17 @@ void IslPTXGenerator::freeScop() {
 
 void IslPTXGenerator::buildGPUKernel() {
   isl_ctx *Ctx = getIslCtx();
-  Prog = gpu_prog_alloc(Ctx, Scop);
-  isl_set *Guard = isl_union_set_params(isl_union_set_copy(Prog->scop->domain));
-  Prog->context = isl_set_intersect(Prog->context, Guard);
-
-  int r = generate_gpu(Ctx, Scop, Options);
+  struct gen_ext ext;
+  ext.guard = nullptr;
+  ext.tree = nullptr;
+  ext.prog = nullptr;
+  if (generate_gpu(Ctx, Scop, Options, &ext) < 0) {
+    errs() << "GPGPU code geneation failed.\n";
+    return;
+  }
+  Guard = ext.guard;
+  Tree = ext.tree;
+  Prog = ext.prog;
 }
 
 void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
