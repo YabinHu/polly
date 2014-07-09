@@ -10,8 +10,7 @@
 struct gpu_prog;
 
 struct gen_ext {
-  isl_set *context;
-  isl_set *guard;
+  isl_ast_node *guard;
   isl_ast_node *tree;
   struct gpu_prog *prog;
 };

@@ -103,17 +103,14 @@ private:
   /// @brief The generated GPU kernel.
   struct ppcg_kernel *Kernel;
 
+  /// @brief The if-like gurad of the host code.
+  isl_ast_node *Guard;
+
   /// @brief The generated AST.
   isl_ast_node *Tree;
 
   /// @brief Information about the current GPU program.
   struct gpu_prog *Prog;
-
-  /// @brief GPU program context.
-  isl_set *Context;
-
-  /// @brief The if-like gurad of the host code.
-  isl_set *Guard;
 
   /// @brief Build the internal scop.
   void buildScop();
