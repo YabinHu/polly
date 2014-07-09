@@ -423,7 +423,8 @@ void MemoryAccess::assumeNoOutOfBound(const IRAccess &Access) {
 
 MemoryAccess::MemoryAccess(const IRAccess &Access, const Instruction *AccInst,
                            ScopStmt *Statement)
-    : Statement(Statement), Inst(AccInst), newAccessRelation(nullptr) {
+    : Statement(Statement), Inst(AccInst), newAccessRelation(nullptr),
+      Id(nullptr) {
 
   BaseAddr = Access.getBase();
   setBaseName();
@@ -488,7 +489,7 @@ __isl_give isl_id *MemoryAccess::getRefID() const {
 
 MemoryAccess::MemoryAccess(const Value *BaseAddress, ScopStmt *Statement)
     : Type(READ), BaseAddr(BaseAddress), Statement(Statement),
-      newAccessRelation(nullptr) {
+      newAccessRelation(nullptr), Id(nullptr) {
 
   isl_basic_map *BasicAccessMap = createBasicAccessMap(Statement);
   AccessRelation = isl_map_from_basic_map(BasicAccessMap);
