@@ -1155,6 +1155,8 @@ public:
     PollyIRBuilder Builder(StartBlock->getContext(), llvm::ConstantFolder(),
                            polly::IRInserter(Annotator));
     Builder.SetInsertPoint(StartBlock->begin());
+    IslNodeBuilder NodeBuilder(Builder, Annotator, this);
+
 #ifdef GPU_CODEGEN
     struct ppcg_options *Options =
         (struct ppcg_options *)malloc(sizeof(struct ppcg_options));
@@ -1184,8 +1186,8 @@ public:
     errs() << isl_printer_get_str(p) << "\n";
     isl_printer_free(p);
     */
+    NodeBuilder.setPTXGenerator(&PTXGen);
 #endif
-    IslNodeBuilder NodeBuilder(Builder, Annotator, this);
 
     Builder.SetInsertPoint(StartBlock->getSinglePredecessor()->begin());
     NodeBuilder.addParameters(S.getContext());
