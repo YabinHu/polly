@@ -1145,6 +1145,13 @@ public:
     simplifyRegion(&S, this);
 
     BasicBlock *StartBlock = executeScopConditionally(S, this);
+#ifndef GPU_CODEGEN
+    isl_ast_node *Ast = AstInfo.getAst();
+#endif
+    LoopAnnotator Annotator;
+    PollyIRBuilder Builder(StartBlock->getContext(), llvm::ConstantFolder(),
+                           polly::IRInserter(Annotator));
+    Builder.SetInsertPoint(StartBlock->begin());
 #ifdef GPU_CODEGEN
     struct ppcg_options *Options =
         (struct ppcg_options *)malloc(sizeof(struct ppcg_options));
@@ -1164,18 +1171,16 @@ public:
     Options->opencl_use_gpu = 0;
     const std::string Triple = "nvptx64-unknown-unknown";
     errs() << "hello ptx code generator.\n";
-#else
-    isl_ast_node *Ast = AstInfo.getAst();
-#endif
-    LoopAnnotator Annotator;
-    PollyIRBuilder Builder(StartBlock->getContext(), llvm::ConstantFolder(),
-                           polly::IRInserter(Annotator));
-    Builder.SetInsertPoint(StartBlock->begin());
-#ifdef GPU_CODEGEN
+
     IslPTXGenerator PTXGen(Builder, this, Triple, Options);
     isl_ast_node *Ast = PTXGen.getOutputAST();
-    isl_ast_node_dump(Ast);
-    isl_ast_node_free(Ast);
+    /* Uncomment this to dump the host node.
+    isl_printer *p = isl_printer_to_str(isl_ast_node_get_ctx(Ast));
+    p = isl_printer_set_output_format(p, ISL_FORMAT_C);
+    p = isl_printer_print_ast_node(p, Ast);
+    errs() << isl_printer_get_str(p) << "\n";
+    isl_printer_free(p);
+    */
 #endif
     IslNodeBuilder NodeBuilder(Builder, Annotator, this);
 
@@ -1192,7 +1197,7 @@ public:
     Branch->setCondition(V);
     Builder.SetInsertPoint(StartBlock->begin());
 
-    //NodeBuilder.create(Ast);
+    NodeBuilder.create(Ast);
     return true;
   }
 
