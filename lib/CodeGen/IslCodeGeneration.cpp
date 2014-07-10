@@ -1060,6 +1060,39 @@ void IslNodeBuilder::createSubstitutionsVector(
   isl_ast_expr_free(Expr);
 }
 
+#ifdef GPU_CODEGEN
+static void createForGPGPU(IslPTXGenerator *Gen, PollyIRBuilder &Builder,
+                           __isl_take isl_ast_node *Node, int BackendType) {
+  assert(BackendType == 0 && "We only support PTX codegen currently.");
+
+  BasicBlock::iterator KernelBody;
+  SetVector<Value *> ScalarValues;
+  SetVector<Value *> InArrayValues;
+  SetVector<Value *> OutArrayValues;
+  SetVector<Value *> OldIVS;
+  std::vector<int> NumIterations;
+  IslPTXGenerator::ValueToValueMapTy VMap;
+  BasicBlock *AfterBB = 0;
+
+  Gen->startGeneration(VMap, &KernelBody);
+  BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
+  Builder.SetInsertPoint(KernelBody);
+
+  // Generate kernel code in the subfunction.
+  // struct GPUKernel *Kernel = PTXGen.getGPUKernel();
+  // assert(Kernel->tree && "We should have got a kernel isl_ast_node.");
+  // createKernel(Kernel->tree);
+  Function *FN = Builder.GetInsertBlock()->getParent();
+
+  // Set back the insert point to host end code.
+  Builder.SetInsertPoint(AfterLoop);
+  // Gen->setLaunchingParameters(Kernel);
+  // Gen->finishGeneration(FN);
+
+  isl_ast_node_free(Node);
+}
+#endif
+
 void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
   ValueMapT VMap;
   LoopToScevMapT LTS;
@@ -1069,7 +1102,18 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
   isl_ast_expr *Expr = isl_ast_node_user_get_expr(User);
   isl_ast_expr *StmtExpr = isl_ast_expr_get_op_arg(Expr, 0);
   Id = isl_ast_expr_get_id(StmtExpr);
+#ifdef GPU_CODEGEN
+  const char *Str = isl_id_get_name(Id);
+  isl_id_free(Id);
   isl_ast_expr_free(StmtExpr);
+  isl_ast_expr_free(Expr);
+
+  if (!strcmp(Str, "kernel")) {
+    createForGPGPU(PTXGen, Builder, User, 0);
+  }
+
+  return;
+#endif
 
   Stmt = (ScopStmt *)isl_id_get_user(Id);
   createSubstitutions(Expr, Stmt, VMap, LTS);
