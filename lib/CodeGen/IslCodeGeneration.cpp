@@ -627,17 +627,20 @@ class IslNodeBuilder {
 public:
   IslNodeBuilder(PollyIRBuilder &Builder, LoopAnnotator &Annotator, Pass *P)
       : Builder(Builder), Annotator(Annotator), ExprBuilder(Builder, IDToValue),
-        P(P) {}
+        P(P), PTXGen(nullptr) {}
 
   void addParameters(__isl_take isl_set *Context);
   void create(__isl_take isl_ast_node *Node);
   IslExprBuilder &getExprBuilder() { return ExprBuilder; }
+  IslPTXGenerator *getPTXGenerator() { return PTXGen; }
+  void setPTXGenerator(IslPTXGenerator *Gen) { PTXGen = Gen; }
 
 private:
   PollyIRBuilder &Builder;
   LoopAnnotator &Annotator;
   IslExprBuilder ExprBuilder;
   Pass *P;
+  IslPTXGenerator *PTXGen;
 
   // This maps an isl_id* to the Value* it has in the generated program. For now
   // on, the only isl_ids that are stored here are the newly calculated loop
