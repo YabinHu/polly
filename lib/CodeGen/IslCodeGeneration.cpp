@@ -627,13 +627,21 @@ class IslNodeBuilder {
 public:
   IslNodeBuilder(PollyIRBuilder &Builder, LoopAnnotator &Annotator, Pass *P)
       : Builder(Builder), Annotator(Annotator), ExprBuilder(Builder, IDToValue),
-        P(P), PTXGen(nullptr) {}
+#ifdef GPU_CODEGEN
+        P(P), PTXGen(nullptr) {
+  }
+#else
+        P(P) {
+  }
+#endif
 
   void addParameters(__isl_take isl_set *Context);
   void create(__isl_take isl_ast_node *Node);
   IslExprBuilder &getExprBuilder() { return ExprBuilder; }
+#ifdef GPU_CODEGEN
   IslPTXGenerator *getPTXGenerator() { return PTXGen; }
   void setPTXGenerator(IslPTXGenerator *Gen) { PTXGen = Gen; }
+#endif
 
 private:
   PollyIRBuilder &Builder;
@@ -1087,7 +1095,7 @@ static void createForGPGPU(IslPTXGenerator *Gen, PollyIRBuilder &Builder,
   // Set back the insert point to host end code.
   Builder.SetInsertPoint(AfterLoop);
   // Gen->setLaunchingParameters(Kernel);
-  // Gen->finishGeneration(FN);
+  Gen->finishGeneration(FN);
 
   isl_ast_node_free(Node);
 }
