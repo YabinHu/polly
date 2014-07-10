@@ -1175,6 +1175,7 @@ public:
     IslPTXGenerator PTXGen(Builder, this, Triple, Options);
     isl_ast_node *Ast = PTXGen.getOutputAST();
     isl_ast_node_dump(Ast);
+    isl_ast_node_free(Ast);
 #endif
     IslNodeBuilder NodeBuilder(Builder, Annotator, this);
 
