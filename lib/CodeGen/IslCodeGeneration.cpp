@@ -736,6 +736,9 @@ private:
                         __isl_take isl_union_map *Schedule);
   void createUser(__isl_take isl_ast_node *User);
   void createBlock(__isl_take isl_ast_node *Block);
+#ifdef GPU_CODEGEN
+  void createForGPGPU(__isl_take isl_ast_node *Node, int BackendType);
+#endif
 };
 
 __isl_give isl_ast_expr *
@@ -1069,8 +1072,8 @@ void IslNodeBuilder::createSubstitutionsVector(
 }
 
 #ifdef GPU_CODEGEN
-static void createForGPGPU(IslPTXGenerator *Gen, PollyIRBuilder &Builder,
-                           __isl_take isl_ast_node *Node, int BackendType) {
+void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
+                                    int BackendType) {
   assert(BackendType == 0 && "We only support PTX codegen currently.");
 
   BasicBlock::iterator KernelBody;
@@ -1082,20 +1085,23 @@ static void createForGPGPU(IslPTXGenerator *Gen, PollyIRBuilder &Builder,
   IslPTXGenerator::ValueToValueMapTy VMap;
   BasicBlock *AfterBB = 0;
 
-  Gen->startGeneration(VMap, &KernelBody);
+  PTXGen->startGeneration(VMap, &KernelBody);
   BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
   Builder.SetInsertPoint(KernelBody);
 
   // Generate kernel code in the subfunction.
-  // struct GPUKernel *Kernel = PTXGen.getGPUKernel();
-  // assert(Kernel->tree && "We should have got a kernel isl_ast_node.");
-  // createKernel(Kernel->tree);
+  isl_id *Id = isl_ast_node_get_annotation(Node);
+  struct ppcg_kernel *Kernel = (struct ppcg_kernel *)isl_id_get_user(Id);
+  isl_id_free(Id);
+  assert(Kernel->tree && "We should have got a kernel isl_ast_node.");
+  isl_ast_node_dump(Kernel->tree);
+  create(isl_ast_node_copy(Kernel->tree));
   Function *FN = Builder.GetInsertBlock()->getParent();
 
   // Set back the insert point to host end code.
   Builder.SetInsertPoint(AfterLoop);
-  // Gen->setLaunchingParameters(Kernel);
-  Gen->finishGeneration(FN);
+  // PTXGen->setLaunchingParameters(Kernel);
+  // PTXGen->finishGeneration(FN);
 
   isl_ast_node_free(Node);
 }
