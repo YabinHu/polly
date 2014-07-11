@@ -86,6 +86,9 @@ public:
   ///
   void setLaunchingParameters(struct ppcg_kernel *Kernel);
 
+  /// @brief Add synchronization statement to kernel.
+  void addKernelSynchronization();
+
 private:
   PollyIRBuilder &Builder;
   Pass *P;
@@ -180,6 +183,7 @@ private:
   void createCallCleanupGPGPUResources(Value *DeviceData, Value *Module,
                                        Value *Context, Value *Kernel,
                                        Value *Device);
+  void createCallBarrierIntrinsic();
 
   /// @brief Create the CUDA subfunction.
   ///

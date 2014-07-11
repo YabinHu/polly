@@ -593,6 +593,16 @@ void IslPTXGenerator::createCallCleanupGPGPUResources(Value *DeviceData,
   Builder.CreateCall5(F, DeviceData, Module, Context, Kernel, Device);
 }
 
+void IslPTXGenerator::createCallBarrierIntrinsic() {
+  Function *Syn = Intrinsic::getDeclaration(getModule(),
+                                            Intrinsic::nvvm_barrier0);
+  Builder.CreateCall(Syn);
+}
+
+void IslPTXGenerator::addKernelSynchronization() {
+  createCallBarrierIntrinsic();
+}
+
 Value *IslPTXGenerator::getCUDAGridWidth() {
   return ConstantInt::get(getInt64Type(), GridWidth);
 }
