@@ -213,7 +213,7 @@ void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
   // createValueMap(VMap, Kernel->array);
 
   // Create Value* map of host scalar variable to its device counterpart.
-  // creatreValueMap(VMap, Kernel->var);
+  // createValueMap(VMap, Kernel->var);
 
   // Add blockID, threadID, grid size, block size, etc.
   // FIXME: These intrinsics should be inserted on-demand. However, we insert
@@ -927,9 +927,10 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   createCallLaunchKernel(CUKernel, getCUDAGridWidth(), getCUDAGridHeight());
 
   // Copy the results back from the GPU to the host.
-  //Value *HData = Builder.CreateBitCast(OutputAddr, getI8PtrType(), "host_data");
-  //LoadInst *DData = Builder.CreateLoad(VMap[OutputAddr], "device_data");
-  //createCallCopyFromDeviceToHost(HData, DData, getOutputArraySizeInBytes());
+  // Value *HData = Builder.CreateBitCast(OutputAddr, getI8PtrType(),
+  // "host_data");
+  // LoadInst *DData = Builder.CreateLoad(VMap[OutputAddr], "device_data");
+  // createCallCopyFromDeviceToHost(HData, DData, getOutputArraySizeInBytes());
 
   // Record the end time.
   LoadInst *CUStartEvent = Builder.CreateLoad(PtrCUStartEvent, "start_timer");
@@ -939,7 +940,7 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   // Cleanup all the resources used.
   LoadInst *CUContext = Builder.CreateLoad(PtrCUContext, "cucontext");
   LoadInst *CUDevice = Builder.CreateLoad(PtrCUDevice, "cudevice");
-  //createCallCleanupGPGPUResources(DData, CUModule, CUContext, CUKernel,
+  // createCallCleanupGPGPUResources(DData, CUModule, CUContext, CUKernel,
   //                                CUDevice);
 
   // Erase the ptx kernel and device subfunctions and ptx intrinsics from
