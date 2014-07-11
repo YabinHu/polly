@@ -71,8 +71,8 @@ using namespace polly;
 IslPTXGenerator::IslPTXGenerator(PollyIRBuilder &Builder, Pass *P,
                                  const std::string &Triple,
                                  struct ppcg_options *Opt)
-    : Builder(Builder), P(P), GPUTriple(Triple), Options(Opt), Guard(nullptr),
-      Tree(nullptr), Prog(nullptr) {
+    : Builder(Builder), P(P), GPUTriple(Triple), Options(Opt), Kernel(nullptr),
+      Guard(nullptr), Tree(nullptr), Prog(nullptr) {
 
   buildScop();
   buildGPUKernel();
