@@ -650,8 +650,8 @@ void IslPTXGenerator::createCallCleanupGPGPUResources(Value *DeviceData,
 }
 
 void IslPTXGenerator::createCallBarrierIntrinsic() {
-  Function *Syn = Intrinsic::getDeclaration(getModule(),
-                                            Intrinsic::nvvm_barrier0);
+  Function *Syn =
+      Intrinsic::getDeclaration(getModule(), Intrinsic::nvvm_barrier0);
   Builder.CreateCall(Syn);
 }
 
