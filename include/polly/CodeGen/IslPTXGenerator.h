@@ -63,7 +63,7 @@ public:
   /// @param KernelBody   A pointer to an iterator that is set to point to the
   ///                     body of the created loop. It should be used to insert
   ///                     instructions that form the actual loop body.
-  void startGeneration(ValueToValueMapTy &VMap,
+  void startGeneration(struct ppcg_kernel *CurKernel, ValueToValueMapTy &VMap,
                        BasicBlock::iterator *KernelBody);
 
   /// @brief Execute the post-operations to build a GPGPU parallel loop.
@@ -77,10 +77,6 @@ public:
   ///
   /// @param Bytes        Output array size in bytes.
   void setOutputBytes(unsigned Bytes) { OutputBytes = Bytes; }
-
-  /// @brief Set current struct ppcg_kernel *Kernel.
-  ///
-  void setGPUKernel(struct ppcg_kernel *Ker) { Kernel = Ker; }
 
   /// @brief Set the parameters for launching PTX kernel.
   ///
