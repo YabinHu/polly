@@ -246,16 +246,54 @@ void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
   BlockHeight = Builder.CreateIntCast(BlockHeight, Ty, false);
   Value *BlockDepth = Builder.CreateCall(GetNtidZ);
   BlockDepth = Builder.CreateIntCast(BlockDepth, Ty, false);
-  Value *BIDx = Builder.CreateCall(GetCtaidX);
-  BIDx = Builder.CreateIntCast(BIDx, Ty, false);
-  Value *BIDy = Builder.CreateCall(GetCtaidY);
-  BIDy = Builder.CreateIntCast(BIDy, Ty, false);
-  Value *TIDx = Builder.CreateCall(GetTidX);
-  TIDx = Builder.CreateIntCast(TIDx, Ty, false);
-  Value *TIDy = Builder.CreateCall(GetTidY);
-  TIDy = Builder.CreateIntCast(TIDy, Ty, false);
-  Value *TIDz = Builder.CreateCall(GetTidZ);
-  TIDz = Builder.CreateIntCast(TIDz, Ty, false);
+
+  int NumGrid = isl_multi_pw_aff_dim(Kernel->grid_size, isl_dim_set);
+  int NumBlock = Kernel->n_block;
+
+  switch (NumGrid) {
+  case 1: {
+    BIDx = Builder.CreateCall(GetCtaidX);
+    BIDx = Builder.CreateIntCast(BIDx, Ty, false);
+    break;
+  }
+  case 2: {
+    BIDx = Builder.CreateCall(GetCtaidX);
+    BIDx = Builder.CreateIntCast(BIDx, Ty, false);
+    BIDy = Builder.CreateCall(GetCtaidY);
+    BIDy = Builder.CreateIntCast(BIDy, Ty, false);
+    break;
+  }
+  default:
+    errs() << "Set gird id error\n";
+    break;
+  }
+
+  switch (NumBlock) {
+  case 1: {
+    TIDx = Builder.CreateCall(GetTidX);
+    TIDx = Builder.CreateIntCast(TIDx, Ty, false);
+    break;
+  }
+  case 2: {
+    TIDx = Builder.CreateCall(GetTidX);
+    TIDx = Builder.CreateIntCast(TIDx, Ty, false);
+    TIDy = Builder.CreateCall(GetTidY);
+    TIDy = Builder.CreateIntCast(TIDy, Ty, false);
+    break;
+  }
+  case 3: {
+    TIDx = Builder.CreateCall(GetTidX);
+    TIDx = Builder.CreateIntCast(TIDx, Ty, false);
+    TIDy = Builder.CreateCall(GetTidY);
+    TIDy = Builder.CreateIntCast(TIDy, Ty, false);
+    TIDz = Builder.CreateCall(GetTidZ);
+    TIDz = Builder.CreateIntCast(TIDz, Ty, false);
+    break;
+  }
+  default:
+    errs() << "Set thread id error.\n";
+    break;
+  }
 
   Builder.CreateBr(BodyBB);
   Builder.SetInsertPoint(BodyBB);
@@ -279,6 +317,25 @@ void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
   // Reset insert point to continuation of the kernel body.
   Builder.SetInsertPoint(KernelBody);
   *Subfunction = F;
+}
+
+Value *IslPTXGenerator::getValueOfGPUID(const char *Name) {
+  if (!strcmp(Name, "b0"))
+    return cast<Value>(BIDx);
+
+  if (!strcmp(Name, "b1"))
+    return cast<Value>(BIDy);
+
+  if (!strcmp(Name, "t0"))
+    return cast<Value>(TIDx);
+
+  if (!strcmp(Name, "t1"))
+    return cast<Value>(TIDy);
+
+  if (!strcmp(Name, "t2"))
+    return cast<Value>(TIDz);
+
+  return nullptr;
 }
 
 void IslPTXGenerator::startGeneration(ValueToValueMapTy &VMap,
