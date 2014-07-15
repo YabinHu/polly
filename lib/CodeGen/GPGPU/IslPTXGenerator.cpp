@@ -659,20 +659,20 @@ void IslPTXGenerator::addKernelSynchronization() {
   createCallBarrierIntrinsic();
 }
 
-Value *IslPTXGenerator::getCUDAGridWidth() {
+Value *IslPTXGenerator::getCUDAGridDimX() {
   return ConstantInt::get(getInt64Type(), GridWidth);
 }
 
-Value *IslPTXGenerator::getCUDAGridHeight() {
+Value *IslPTXGenerator::getCUDAGridDimY() {
   return ConstantInt::get(getInt64Type(), GridHeight);
 }
 
-Value *IslPTXGenerator::getCUDABlockWidth() {
-  return ConstantInt::get(getInt64Type(), BlockWidth);
+Value *IslPTXGenerator::getCUDABlockDimX() {
+  return ConstantInt::get(getInt64Type(), Kernel->block_dim[0]);
 }
 
-Value *IslPTXGenerator::getCUDABlockHeight() {
-  return ConstantInt::get(getInt64Type(), BlockHeight);
+Value *IslPTXGenerator::getCUDABlockDimY() {
+  return ConstantInt::get(getInt64Type(), Kernel->block_dim[1]);
 }
 
 Value *IslPTXGenerator::getOutputArraySizeInBytes() {
@@ -913,8 +913,8 @@ void IslPTXGenerator::finishGeneration(Function *F) {
       std::string DevName("device_");
       DevName.append(BaseAddr->getName().str());
       LoadInst *DData = Builder.CreateLoad(PtrDevData, DevName);
-      createCallSetKernelParameters(CUKernel, getCUDABlockWidth(),
-                                    getCUDABlockHeight(), DData,
+      createCallSetKernelParameters(CUKernel, getCUDABlockDimX(),
+                                    getCUDABlockDimY(), DData,
                                     PtrParamOffset);
 
       if (InAValues.count(BaseAddr)) {
@@ -944,8 +944,8 @@ void IslPTXGenerator::finishGeneration(Function *F) {
     LoadInst *DData = Builder.CreateLoad(PtrDevData, "device_scalar");
     createCallCopyFromHostToDevice(DData, HData, Size);
 
-    createCallSetKernelParameters(CUKernel, getCUDABlockWidth(),
-                                  getCUDABlockHeight(), DData, PtrParamOffset);
+    createCallSetKernelParameters(CUKernel, getCUDABlockDimX(),
+                                  getCUDABlockDimY(), DData, PtrParamOffset);
   }
 
   // Allocate device memory and its corresponding host memory.
@@ -980,8 +980,8 @@ void IslPTXGenerator::finishGeneration(Function *F) {
       createCallCopyFromHostToDevice(DData, HData, ArraySize);
 
       // add this parameter to gpu function
-      createCallSetKernelParameters(CUKernel, getCUDABlockWidth(),
-                                    getCUDABlockHeight(), DData,
+      createCallSetKernelParameters(CUKernel, getCUDABlockDimX(),
+                                    getCUDABlockDimY(), DData,
                                     PtrParamOffset);
     }
   }
@@ -990,7 +990,7 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   createCallStartTimerByCudaEvent(PtrCUStartEvent, PtrCUStopEvent);
 
   // Launch the GPU kernel.
-  createCallLaunchKernel(CUKernel, getCUDAGridWidth(), getCUDAGridHeight());
+  createCallLaunchKernel(CUKernel, getCUDAGridDimX(), getCUDAGridDimY());
 
   // Copy the results back from the GPU to the host.
   // Value *HData = Builder.CreateBitCast(OutputAddr, getI8PtrType(),

@@ -201,17 +201,17 @@ private:
   /// @param NumArgs      The number of parameters of this scop.
   Function *createSubfunctionDefinition(int NumMemAccs, int NumArgs);
 
-  /// @brief Get the Value of CUDA block width.
-  Value *getCUDABlockWidth();
+  /// @brief Get the Value of CUDA block X-dimension.
+  Value *getCUDABlockDimX();
 
-  /// @brief Get the Value of CUDA block height.
-  Value *getCUDABlockHeight();
+  /// @brief Get the Value of CUDA block Y-dimension.
+  Value *getCUDABlockDimY();
 
-  /// @brief Get the Value of CUDA Gird width.
-  Value *getCUDAGridWidth();
+  /// @brief Get the Value of CUDA grid X-dimension.
+  Value *getCUDAGridDimX();
 
-  /// @brief Get the Value of CUDA grid height.
-  Value *getCUDAGridHeight();
+  /// @brief Get the Value of CUDA grid Y-dimension.
+  Value *getCUDAGridDimY();
 
   /// @brief Get the Value of the bytes of the output array.
   Value *getOutputArraySizeInBytes();
