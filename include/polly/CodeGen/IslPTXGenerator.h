@@ -207,6 +207,9 @@ private:
   /// @brief Get the Value of CUDA block Y-dimension.
   Value *getCUDABlockDimY();
 
+  /// @brief Get the Value of CUDA block Z-dimension.
+  Value *getCUDABlockDimZ();
+
   /// @brief Get the Value of CUDA grid X-dimension.
   Value *getCUDAGridDimX();
 

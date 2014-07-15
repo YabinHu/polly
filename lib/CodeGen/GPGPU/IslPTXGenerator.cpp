@@ -672,7 +672,17 @@ Value *IslPTXGenerator::getCUDABlockDimX() {
 }
 
 Value *IslPTXGenerator::getCUDABlockDimY() {
-  return ConstantInt::get(getInt64Type(), Kernel->block_dim[1]);
+  if (Kernel->n_block >= 2)
+    return ConstantInt::get(getInt64Type(), Kernel->block_dim[1]);
+  else
+    return ConstantInt::get(getInt64Type(), 1);
+}
+
+Value *IslPTXGenerator::getCUDABlockDimZ() {
+  if (Kernel->n_block == 3)
+    return ConstantInt::get(getInt64Type(), Kernel->block_dim[2]);
+  else
+    return ConstantInt::get(getInt64Type(), 1);
 }
 
 Value *IslPTXGenerator::getOutputArraySizeInBytes() {
