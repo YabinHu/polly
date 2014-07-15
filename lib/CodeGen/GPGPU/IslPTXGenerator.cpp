@@ -821,12 +821,20 @@ void IslPTXGenerator::eraseUnusedFunctions(Function *SubFunction) {
     FuncPTXReadNTidY->eraseFromParent();
   }
 
+  if (Function *FuncPTXReadNTidZ = M->getFunction("llvm.ptx.read.ntid.z")) {
+    FuncPTXReadNTidZ->eraseFromParent();
+  }
+
   if (Function *FuncPTXReadTidX = M->getFunction("llvm.ptx.read.tid.x")) {
     FuncPTXReadTidX->eraseFromParent();
   }
 
   if (Function *FuncPTXReadTidY = M->getFunction("llvm.ptx.read.tid.y")) {
     FuncPTXReadTidY->eraseFromParent();
+  }
+
+  if (Function *FuncPTXReadTidZ = M->getFunction("llvm.ptx.read.tid.z")) {
+    FuncPTXReadTidZ->eraseFromParent();
   }
 
   if (Function *FuncNVVMBarrier0 = M->getFunction("llvm.nvvm.barrier0")) {
