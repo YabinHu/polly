@@ -1331,8 +1331,8 @@ public:
     Options->ctx = nullptr;
     Options->sizes = nullptr;
     Options->tile_size = 32;
-    Options->use_private_memory = true;
-    Options->use_shared_memory = true;
+    Options->use_private_memory = /*true*/0;
+    Options->use_shared_memory = /*true*/0;
     Options->max_shared_memory = 8192;
     Options->target = 0; /* ptx codegen */
     Options->openmp = 0;
