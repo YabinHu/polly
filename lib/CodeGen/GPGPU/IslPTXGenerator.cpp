@@ -133,7 +133,7 @@ Function *IslPTXGenerator::createSubfunctionDefinition(int NumMemAccs,
 
 void IslPTXGenerator::buildScop() {
   polly::Scop *S = getPollyScop();
-  Scop = ppcg_scop_from_pet_scop(S, Options);
+  Scop = ppcg_scop_from_polly_scop(S, Options);
   assert(Scop && "Build ppcg scop failed.");
 }
 
