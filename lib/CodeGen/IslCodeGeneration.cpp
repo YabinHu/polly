@@ -742,6 +742,7 @@ private:
   void createKernelDomain(struct ppcg_kernel_stmt *Stmt);
   void createKernelCopy(struct ppcg_kernel_stmt *Stmt);
   void createKernelSync();
+  Value *getGridSize(struct ppcg_kernel *Kernel, int Pos);
   void createForGPGPU(__isl_take isl_ast_node *Node, int BackendType);
 #endif
 };
@@ -1089,6 +1090,19 @@ void IslNodeBuilder::createKernelDomain(struct ppcg_kernel_stmt *KernelStmt) {
   Stmt->dump();
 }
 
+Value *IslNodeBuilder::getGridSize(struct ppcg_kernel *Kernel, int Pos) {
+  isl_ast_build *Context =
+      isl_ast_build_from_context(isl_set_copy(Kernel->context));
+  isl_pw_aff *Size =
+      isl_pw_aff_copy(isl_multi_pw_aff_get_pw_aff(Kernel->grid_size, Pos));
+  isl_ast_expr *GridSize = isl_ast_build_expr_from_pw_aff(Context, Size);
+  Value *Res = ExprBuilder.create(GridSize);
+  isl_pw_aff_free(Size);
+  isl_ast_build_free(Context);
+
+  return Res;
+}
+
 void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
                                     int BackendType) {
   assert(BackendType == 0 && "We only support PTX codegen currently.");
@@ -1116,7 +1130,14 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
 
   // Set back the insert point to host end code.
   Builder.SetInsertPoint(AfterLoop);
-  // PTXGen->setLaunchingParameters(Kernel);
+  int Dim = isl_multi_pw_aff_dim(Kernel->grid_size, isl_dim_set);
+  assert((Dim >= 1 && Dim <= 2) && "CUDA grid size should be 1d or 2d.");
+  Value *GridDimX =getGridSize(Kernel, 0);
+  Value *GridDimY = nullptr;
+  if (Dim == 2)
+    GridDimY = getGridSize(Kernel, 1);
+
+  PTXGen->setLaunchingParameters(GridDimX, GridDimY);
   PTXGen->finishGeneration(FN);
 
   isl_ast_node_free(Node);

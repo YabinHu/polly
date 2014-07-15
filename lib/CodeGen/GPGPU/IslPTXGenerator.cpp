@@ -660,11 +660,14 @@ void IslPTXGenerator::addKernelSynchronization() {
 }
 
 Value *IslPTXGenerator::getCUDAGridDimX() {
-  return ConstantInt::get(getInt64Type(), GridWidth);
+  return GridDimX;
 }
 
 Value *IslPTXGenerator::getCUDAGridDimY() {
-  return ConstantInt::get(getInt64Type(), GridHeight);
+  if (!GridDimY)
+    return ConstantInt::get(getInt64Type(), 1);
+  else
+    return GridDimY;
 }
 
 Value *IslPTXGenerator::getCUDABlockDimX() {
@@ -841,20 +844,10 @@ static unsigned getArraySizeInBytes(const ArrayType *AT) {
   return Bytes;
 }
 
-void IslPTXGenerator::setLaunchingParameters(struct ppcg_kernel *Kernel) {
-#if 0
-  int Dim = isl_multi_pw_aff_dim(Kernel->grid_size, isl_dim_set);
-  for (int i = Dim - 1; i >= 0; --i) {
-    isl_pw_aff *Bound = isl_multi_pw_aff_get_pw_aff(Kernel->grid_size, i);
-    //createAValueForIsl_PW_AFF, set it to GridWidth and GridHeight
-    isl_pw_aff_free(Bound);
-  }
-#endif
-  GridWidth = 1;
-  GridHeight = 1;
-
-  BlockWidth = Kernel->block_dim[0];
-  BlockHeight = Kernel->block_dim[1];
+void IslPTXGenerator::setLaunchingParameters(Value *GridSizeX,
+                                             Value *GridSizeY) {
+  GridDimX = GridSizeX;
+  GridDimY = GridSizeY;
 }
 
 void IslPTXGenerator::finishGeneration(Function *F) {

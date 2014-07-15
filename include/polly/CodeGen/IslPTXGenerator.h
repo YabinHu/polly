@@ -80,7 +80,7 @@ public:
 
   /// @brief Set the parameters for launching PTX kernel.
   ///
-  void setLaunchingParameters(struct ppcg_kernel *Kernel);
+  void setLaunchingParameters(Value *GridSizeX, Value *GridSizeY);
 
   /// @brief Add synchronization statement to kernel.
   void addKernelSynchronization();
@@ -100,6 +100,7 @@ private:
 
   /// @brief Parameters used for launching PTX kernel.
   int GridWidth, GridHeight, BlockWidth, BlockHeight;
+  Value *GridDimX, *GridDimY;
 
   /// @brief Size of the output array in bytes.
   unsigned OutputBytes;
