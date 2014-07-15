@@ -1345,13 +1345,13 @@ public:
 
     IslPTXGenerator PTXGen(Builder, this, Triple, Options);
     isl_ast_node *Ast = PTXGen.getOutputAST();
-    /* Uncomment this to dump the host node.
+    ///*Uncomment this to dump the host node.
     isl_printer *p = isl_printer_to_str(isl_ast_node_get_ctx(Ast));
     p = isl_printer_set_output_format(p, ISL_FORMAT_C);
-    p = isl_printer_print_ast_node(p, Ast);
+    p = isl_printer_print_ast_node(p, isl_ast_node_copy(Ast));
     errs() << isl_printer_get_str(p) << "\n";
     isl_printer_free(p);
-    */
+    //*/
     NodeBuilder.setPTXGenerator(&PTXGen);
 #endif
 
