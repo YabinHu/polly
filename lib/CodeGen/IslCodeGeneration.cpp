@@ -1204,7 +1204,7 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
 
   SmallVector<isl_id *, 5> IdList;
   switch(KernelStmt->type) {
-  case ppcg_kernel_domain:
+  case ppcg_kernel_domain: {
     Stmt = KernelStmt->u.d.stmt->stmt;
     collect_id_list_from_ast_expr(Expr, IdList);
     for (isl_id *GPUId : IdList) {
@@ -1213,6 +1213,7 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
       IDToValue[GPUId] = IDValue;
     }
     break;
+  }
   case ppcg_kernel_copy:
     //createKernelCopy(KernelStmt);
     isl_ast_expr_free(Expr);
