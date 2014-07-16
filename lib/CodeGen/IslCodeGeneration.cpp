@@ -1078,6 +1078,14 @@ void IslNodeBuilder::createSubstitutionsVector(
 }
 
 #ifdef GPU_CODEGEN
+static void print_ast_node_as_c_format(__isl_keep isl_ast_node *Ast) {
+  isl_printer *p = isl_printer_to_str(isl_ast_node_get_ctx(Ast));
+  p = isl_printer_set_output_format(p, ISL_FORMAT_C);
+  p = isl_printer_print_ast_node(p, Ast);
+  errs() << isl_printer_get_str(p) << "\n";
+  isl_printer_free(p);
+}
+
 void IslNodeBuilder::createKernelSync() {
   PTXGen->addKernelSynchronization();
 }
@@ -1121,6 +1129,7 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   struct ppcg_kernel *Kernel = (struct ppcg_kernel *)isl_id_get_user(Id);
   isl_id_free(Id);
   assert(Kernel->tree && "We should have got a kernel isl_ast_node.");
+  print_ast_node_as_c_format(Kernel->tree);
   PTXGen->startGeneration(Kernel, VMap, &KernelBody);
   BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
   Builder.SetInsertPoint(KernelBody);
@@ -1350,15 +1359,9 @@ public:
     errs() << "hello ptx code generator.\n";
 
     IslPTXGenerator PTXGen(Builder, this, Triple, Options);
-    isl_ast_node *Ast = PTXGen.getOutputAST();
-    ///*Uncomment this to dump the host node.
-    isl_printer *p = isl_printer_to_str(isl_ast_node_get_ctx(Ast));
-    p = isl_printer_set_output_format(p, ISL_FORMAT_C);
-    p = isl_printer_print_ast_node(p, Ast);
-    errs() << isl_printer_get_str(p) << "\n";
-    isl_printer_free(p);
-    //*/
     NodeBuilder.setPTXGenerator(&PTXGen);
+    isl_ast_node *Ast = PTXGen.getOutputAST();
+    print_ast_node_as_c_format(Ast);
 #endif
 
     Builder.SetInsertPoint(StartBlock->getSinglePredecessor()->begin());
