@@ -4042,6 +4042,32 @@ static __isl_give isl_ast_expr *transform_expr(__isl_take isl_ast_expr *expr,
 	return gpu_local_array_info_linearize_index(data->local_array, expr);
 }
 
+__isl_give isl_id_to_ast_expr *
+polly_stmt_build_ast_exprs(ScopStmt *Stmt, __isl_keep isl_ast_build *build,
+                           struct ppcg_transform_data *data) {
+  isl_ctx *ctx;
+
+  if (!Stmt || !build)
+    return NULL;
+
+  ctx = isl_ast_build_get_ctx(build);
+  isl_id_to_ast_expr *ref2expr = isl_id_to_ast_expr_alloc(ctx, 0);
+
+  for (MemoryAccess *Acc : *Stmt) {
+    isl_map *AccRelation = Acc->getAccessRelation();
+    isl_id *RefId = Acc->getRefId();
+    isl_pw_multi_aff *PMA = isl_pw_multi_aff_from_map(AccRelation);
+    isl_multi_pw_aff *MPA = isl_multi_pw_aff_from_pw_multi_aff(PMA);
+    MPA = isl_multi_pw_aff_coalesce(MPA);
+    MPA = transform_index(MPA, RefId, data);
+    isl_ast_expr *Access = isl_ast_build_access_from_multi_pw_aff(build, MPA);
+    Access = transform_expr(Access, RefId, data);
+    ref2expr = isl_id_to_ast_expr_set(ref2expr, RefId, Access);
+  }
+
+  return ref2expr;
+}
+
 /* This function is called for each instance of a user statement
  * in the kernel.
  *
@@ -4090,9 +4116,8 @@ static __isl_give isl_ast_node *at_each_domain(__isl_take isl_ast_node *node,
 	data.accesses = stmt->u.d.stmt->accesses;
 	data.iterator_map = iterator_map;
 	data.sched2shared = sched2shared;
-	stmt->u.d.ref2expr = NULL/*pet_stmt_build_ast_exprs(stmt->u.d.stmt->stmt,
-					    build, &transform_index, &data,
-					    &transform_expr, &data)*/;
+	stmt->u.d.ref2expr = polly_stmt_build_ast_exprs(stmt->u.d.stmt->stmt,
+					build, &data);
 	isl_id_free(id);
 	isl_pw_multi_aff_free(iterator_map);
 	isl_pw_multi_aff_free(sched2shared);
