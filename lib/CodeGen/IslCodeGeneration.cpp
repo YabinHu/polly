@@ -1137,15 +1137,23 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
 #endif
 
   createSubstitutions(Expr, Stmt, VMap, LTS);
-  BlockGenerator::generate(Builder, *Stmt, VMap, LTS, P);
 
 #ifdef GPU_CODEGEN
+  for (MemoryAccess *Acc : *Stmt) {
+    const Value *Base = Acc->getBaseAddr();
+    Value *FuncArg = GMap[Base];
+    VMap[Base] = FuncArg;
+  }
+  isl_id_to_ast_expr *Indexes = KernelStmt->u.d.ref2expr;
+  BlockGenerator::generate(Builder, *Stmt, VMap, LTS, P, &ExprBuilder, Indexes);
   for (int i = 0; i < Pos; i++) {
     isl_id *GPUId = IdList[i];
     IDToValue.erase(GPUId);
     isl_id_free(GPUId);
   }
   free(IdList);
+#else
+  BlockGenerator::generate(Builder, *Stmt, VMap, LTS, P);
 #endif
 
   isl_ast_node_free(User);

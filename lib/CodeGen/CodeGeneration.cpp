@@ -463,7 +463,12 @@ void ClastStmtCodeGen::codegen(const clast_user_stmt *u,
   int VectorDimensions = IVS ? IVS->size() : 1;
 
   if (VectorDimensions == 1) {
+#ifndef GPU_CODEGEN
     BlockGenerator::generate(Builder, *Statement, ValueMap, LoopToScev, P);
+#else
+    BlockGenerator::generate(Builder, *Statement, ValueMap, LoopToScev, P,
+                             nullptr, nullptr);
+#endif
     isl_set_free(Domain);
     return;
   }
@@ -781,7 +786,8 @@ void ClastStmtCodeGen::codegenForGPGPU(const clast_for *F) {
 
   updateWithValueMap(VMap);
 
-  BlockGenerator::generate(Builder, *Statement, ValueMap, LoopToScev, P);
+  BlockGenerator::generate(Builder, *Statement, ValueMap, LoopToScev, P,
+                           nullptr, nullptr);
 
   if (AfterBB)
     Builder.SetInsertPoint(AfterBB->begin());

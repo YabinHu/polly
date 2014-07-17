@@ -15,9 +15,12 @@
 
 #include "polly/ScopInfo.h"
 #include "isl/aff.h"
+#include "isl/ast.h"
+#include "isl/ast_build.h"
 #include "isl/set.h"
 #include "polly/CodeGen/BlockGenerators.h"
 #include "polly/CodeGen/CodeGeneration.h"
+#include "polly/CodeGen/IslExprBuilder.h"
 #include "polly/Options.h"
 #include "polly/Support/GICHelper.h"
 #include "polly/Support/SCEVValidator.h"
@@ -155,9 +158,18 @@ Value *IslGenerator::generateIslPwAff(__isl_take isl_pw_aff *PwAff) {
   return User.Result;
 }
 
+#ifndef GPU_CODEGEN
 BlockGenerator::BlockGenerator(PollyIRBuilder &B, ScopStmt &Stmt, Pass *P)
     : Builder(B), Statement(Stmt), P(P), SE(P->getAnalysis<ScalarEvolution>()) {
 }
+#else
+BlockGenerator::BlockGenerator(PollyIRBuilder &B, ScopStmt &Stmt, Pass *P,
+                               IslExprBuilder *ExprBuilder,
+                               isl_id_to_ast_expr *Indexes)
+    : Builder(B), Statement(Stmt), P(P), ExprBuilder(ExprBuilder),
+      Indexes(Indexes), SE(P->getAnalysis<ScalarEvolution>()) {
+}
+#endif
 
 Value *BlockGenerator::lookupAvailableValue(const Value *Old, ValueMapT &BBMap,
                                             ValueMapT &GlobalMap) const {
@@ -300,7 +312,18 @@ Value *BlockGenerator::generateLocationAccessed(const Instruction *Inst,
          "Current and new access function use different spaces");
 
   Value *NewPointer;
+#ifdef GPU_CODEGEN
+  isl_ast_expr *AccessExpr = isl_id_to_ast_expr_get(Indexes, Access.getRefID());
+  isl_ast_expr *IndexExpr = isl_ast_expr_get_op_arg(AccessExpr, 1);
+  Value *Index = ExprBuilder->create(IndexExpr);
+  isl_ast_expr_free(AccessExpr);
+  Value *BaseAddress = const_cast<Value *>(Access.getBaseAddr());
+  BaseAddress = GlobalMap[BaseAddress];
 
+  Type *Ty = Builder.getInt64Ty();
+  Index = Builder.CreateIntCast(Index, Ty, true, "p_newarrayidx_");
+  NewPointer = Builder.CreateGEP(BaseAddress, Index);
+#else
   if (!NewAccessRelation) {
     NewPointer =
         getNewValue(Pointer, BBMap, GlobalMap, LTS, getLoopForInst(Inst));
@@ -309,6 +332,7 @@ Value *BlockGenerator::generateLocationAccessed(const Instruction *Inst,
     NewPointer = getNewAccessOperand(NewAccessRelation, BaseAddress, BBMap,
                                      GlobalMap, LTS, getLoopForInst(Inst));
   }
+#endif
 
   isl_map_free(CurrentAccessRelation);
   isl_map_free(NewAccessRelation);
@@ -395,8 +419,13 @@ VectorBlockGenerator::VectorBlockGenerator(PollyIRBuilder &B,
                                            ScopStmt &Stmt,
                                            __isl_keep isl_map *Schedule,
                                            Pass *P)
+#ifndef GPU_CODEGEN
     : BlockGenerator(B, Stmt, P), GlobalMaps(GlobalMaps), VLTS(VLTS),
       Schedule(Schedule) {
+#else
+    : BlockGenerator(B, Stmt, P, nullptr, nullptr), GlobalMaps(GlobalMaps),
+      VLTS(VLTS), Schedule(Schedule) {
+#endif
   assert(GlobalMaps.size() > 1 && "Only one vector lane found");
   assert(Schedule && "No statement domain provided");
 }
