@@ -50,6 +50,7 @@
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/Verifier.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
@@ -903,6 +904,11 @@ void IslPTXGenerator::finishGeneration(Function *F) {
 
   // Initialize the GPU device.
   createCallInitDevice(PtrCUContext, PtrCUDevice);
+
+  // Make sure the generated bitcode in subfunction is valid.
+  PassManager Passes;
+  Passes.add(createVerifierPass());
+  Passes.run(*(F->getParent()));
 
   // Create the GPU kernel module and entry function.
   Value *PTXString = createPTXKernelFunction(F);
