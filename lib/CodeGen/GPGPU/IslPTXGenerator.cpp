@@ -343,6 +343,30 @@ void IslPTXGenerator::startGeneration(struct ppcg_kernel *CurKernel,
   Builder.SetInsertPoint(PrevInsertPoint);
 }
 
+static Type *getElementType(Type *Ty) {
+  ArrayType *AT;
+  while (AT = dyn_cast<ArrayType>(Ty)) {
+    Ty = AT->getElementType();
+  }
+
+  return Ty;
+}
+
+void IslPTXGenerator::getDeviceArrayBaseAddressMap(ValueToValueMapTy &VMap,
+                                                   Function *F,
+                                                   SetVector<Value *> &Addrs) {
+  Function::arg_iterator AI = F->arg_begin();
+  for (unsigned j = 0; j < Addrs.size(); j++) {
+    Value *BaseAddr = Addrs[j];
+    Type *ArrayTy = BaseAddr->getType();
+    Type *EleTy = getElementType(cast<PointerType>(ArrayTy)->getElementType());
+    Type *PointerToEleTy = PointerType::getUnqual(EleTy);
+    Value *Param = Builder.CreateBitCast(AI, PointerToEleTy);
+    VMap.insert(std::make_pair(BaseAddr, Param));
+    AI++;
+  }
+}
+
 IntegerType *IslPTXGenerator::getInt64Type() { return Builder.getInt64Ty(); }
 
 PointerType *IslPTXGenerator::getI8PtrType() {

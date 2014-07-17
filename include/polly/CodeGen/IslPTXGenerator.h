@@ -88,6 +88,11 @@ public:
   /// @brief Get the Value of GPU block id or thread id by Name.
   Value *getValueOfGPUID(const char *Name);
 
+  /// @brief Get the mapping of device array base address to original
+  ///        array base address.
+  void getDeviceArrayBaseAddressMap(ValueToValueMapTy &VMap, Function *F,
+                                    SetVector<Value *> &Addrs);
+
 private:
   PollyIRBuilder &Builder;
   Pass *P;
