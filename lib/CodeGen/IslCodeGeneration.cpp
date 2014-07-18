@@ -980,12 +980,9 @@ static void print_ast_node_as_c_format(__isl_keep isl_ast_node *Ast) {
   isl_printer_free(p);
 }
 
-void IslNodeBuilder::createKernelSync() {
-  PTXGen->addKernelSynchronization();
-}
+void IslNodeBuilder::createKernelSync() { PTXGen->addKernelSynchronization(); }
 
-void IslNodeBuilder::createKernelCopy(struct ppcg_kernel_stmt *KernelStmt) {
-}
+void IslNodeBuilder::createKernelCopy(struct ppcg_kernel_stmt *KernelStmt) {}
 
 void IslNodeBuilder::createKernelDomain(struct ppcg_kernel_stmt *KernelStmt) {
   ScopStmt *Stmt = KernelStmt->u.d.stmt->stmt;
@@ -1010,11 +1007,6 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   assert(BackendType == 0 && "We only support PTX codegen currently.");
 
   BasicBlock::iterator KernelBody;
-  SetVector<Value *> ScalarValues;
-  SetVector<Value *> InArrayValues;
-  SetVector<Value *> OutArrayValues;
-  SetVector<Value *> OldIVS;
-  std::vector<int> NumIterations;
   IslPTXGenerator::ValueToValueMapTy VMap;
   BasicBlock *AfterBB = 0;
 
@@ -1029,12 +1021,7 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   Builder.SetInsertPoint(KernelBody);
 
   Function *FN = Builder.GetInsertBlock()->getParent();
-  SetVector<Value *> Addrs;
-  Scop *S = P->getAnalysis<ScopInfo>().getScop();
-  for (ScopStmt *Stmt : *S)
-    for (MemoryAccess *Acc : *Stmt)
-      Addrs.insert(const_cast<Value *>(Acc->getBaseAddr()));
-  PTXGen->getDeviceArrayBaseAddressMap(GMap, FN, Addrs);
+  PTXGen->getDeviceArrayBaseAddressMap(GMap, FN);
   create(isl_ast_node_copy(Kernel->tree));
 
   // Set back the insert point to host end code.
@@ -1066,8 +1053,8 @@ static void collect_id_from_ast_expr(__isl_keep isl_ast_expr *Expr,
   if (isl_ast_expr_get_type(Expr) == isl_ast_expr_id) {
     isl_id *Id = isl_ast_expr_get_id(Expr);
     const char *Name = isl_id_get_name(Id);
-    if (!strcmp(Name, "b0") || !strcmp(Name, "b1") || !strcmp(Name, "t0")
-        || !strcmp(Name, "t1") || !strcmp(Name, "t2")) {
+    if (!strcmp(Name, "b0") || !strcmp(Name, "b1") || !strcmp(Name, "t0") ||
+        !strcmp(Name, "t1") || !strcmp(Name, "t2")) {
       IdList[Pos] = Id;
       ++Pos;
     } else
@@ -1115,7 +1102,7 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
   unsigned Pos = 0;
   for (int i = 0; i < 5; ++i)
     IdList[i] = nullptr;
-  switch(KernelStmt->type) {
+  switch (KernelStmt->type) {
   case ppcg_kernel_domain: {
     Stmt = KernelStmt->u.d.stmt->stmt;
     collect_id_list_from_ast_expr(Expr, IdList, Pos);
@@ -1125,10 +1112,9 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
       Value *IDValue = PTXGen->getValueOfGPUID(Name);
       IDToValue[GPUId] = IDValue;
     }
-  }
-  break;
+  } break;
   case ppcg_kernel_copy:
-    //createKernelCopy(KernelStmt);
+    // createKernelCopy(KernelStmt);
     isl_ast_expr_free(Expr);
     isl_ast_node_free(User);
     isl_id_free(Id);
@@ -1254,8 +1240,8 @@ public:
     Options->ctx = nullptr;
     Options->sizes = nullptr;
     Options->tile_size = 32;
-    Options->use_private_memory = /*true*/0;
-    Options->use_shared_memory = /*true*/0;
+    Options->use_private_memory = /*true*/ 0;
+    Options->use_shared_memory = /*true*/ 0;
     Options->max_shared_memory = 8192;
     Options->target = 0; /* ptx codegen */
     Options->openmp = 0;
@@ -1266,7 +1252,8 @@ public:
     const std::string Triple = "nvptx64-unknown-unknown";
     errs() << "hello ptx code generator.\n";
 
-    IslPTXGenerator PTXGen(Builder, this, Triple, Options);
+    IslPTXGenerator PTXGen(Builder, NodeBuilder.getExprBuilder(), this, Triple,
+                           Options);
     NodeBuilder.setPTXGenerator(&PTXGen);
     isl_ast_node *Ast = PTXGen.getOutputAST();
     print_ast_node_as_c_format(Ast);
