@@ -270,7 +270,7 @@ void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
     break;
   }
   default:
-    errs() << "Set gird id error\n";
+    errs() << "Set grid id error\n";
     break;
   }
 
