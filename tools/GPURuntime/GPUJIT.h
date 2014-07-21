@@ -48,7 +48,7 @@
  *   PollyGPUModule *Module;
  *   PollyGPUFunction *Kernel;
  *   PollyGPUDevice *Device;
- *   PollyGPUDevicePtr *PtrDevData;
+ *   PollyGPUDevicePtr *DevData;
  *   int *HostData;
  *   PollyGPUEvent *Start;
  *   PollyGPUEvent *Stop;
@@ -58,13 +58,15 @@
  *   int BlockHeight = 16;
  *   int GridWidth = 8;
  *   int GridHeight = 8;
+ *   void *ParamOffset;
  *
  *   MemSize = 256*64*sizeof(int);
  *   polly_initDevice(&Context, &Device);
  *   polly_getPTXModule(KernelString, &Module);
  *   polly_getPTXKernelEntry(Entry, Module, &Kernel);
  *   polly_allocateMemoryForHostAndDevice(&HostData, &DevData, MemSize);
- *   polly_setKernelParameters(Kernel, BlockWidth, BlockHeight, DevData);
+ *   polly_setKernelParameters(Kernel, BlockWidth, BlockHeight, DevData,
+ *                             ParamOffset);
  *   polly_startTimerByCudaEvent(&Start, &Stop);
  *   polly_launchKernel(Kernel, GridWidth, GridHeight);
  *   polly_copyFromDeviceToHost(HostData, DevData, MemSize);
