@@ -17,6 +17,8 @@
 #include <dlfcn.h>
 #include <stdio.h>
 
+#include "drvapi_error_string.h"
+
 /* Define Polly's GPGPU data types. */
 struct PollyGPUContextT {
   CUcontext Cuda;
@@ -123,6 +125,9 @@ static CudaEventDestroyFcnTy *CudaEventDestroyFcnPtr;
 
 typedef cudaError_t CUDARTAPI CudaThreadSynchronizeFcnTy(void);
 static CudaThreadSynchronizeFcnTy *CudaThreadSynchronizeFcnPtr;
+
+typedef cudaError_t CUDARTAPI CudaDeviceResetFcnTy(void);
+CudaDeviceResetFcnTy *CudaDeviceResetFcnPtr;
 
 static void *getAPIHandle(void *Handle, const char *FuncName) {
   char *Err;
@@ -236,6 +241,9 @@ static int initialDeviceAPIs() {
   CudaThreadSynchronizeFcnPtr = (CudaThreadSynchronizeFcnTy *)getAPIHandle(
       HandleCudaRT, "cudaThreadSynchronize");
 
+  CudaDeviceResetFcnPtr = (CudaDeviceResetFcnTy *)getAPIHandle(
+      HandleCudaRT, "cudaDeviceReset");
+
   return 1;
 }
 
@@ -285,21 +293,26 @@ void polly_initDevice(PollyGPUContext **Context, PollyGPUDevice **Device) {
 }
 
 void polly_getPTXModule(void *PTXBuffer, PollyGPUModule **Module) {
+  CUresult Res;
+
   *Module = malloc(sizeof(PollyGPUModule));
   if (*Module == 0) {
     fprintf(stdout, "Allocate memory for Polly GPU module failed.\n");
     exit(-1);
   }
 
-  if (CuModuleLoadDataExFcnPtr(&((*Module)->Cuda), PTXBuffer, 0, 0, 0) !=
-          CUDA_SUCCESS) {
+  Res = CuModuleLoadDataExFcnPtr(&((*Module)->Cuda), PTXBuffer, 0,0,0);
+  if (Res != CUDA_SUCCESS) {
     fprintf(stdout, "Loading ptx assembly text failed.\n");
+    fprintf(stdout, "The Error Message is %s.\n", getCudaDrvErrorString(Res));
     exit(-1);
   }
 }
 
 void polly_getPTXKernelEntry(const char *KernelName, PollyGPUModule *Module,
                              PollyGPUFunction **Kernel) {
+  CUresult Res;
+
   *Kernel = malloc(sizeof(PollyGPUFunction));
   if (*Kernel == 0) {
     fprintf(stdout, "Allocate memory for Polly GPU kernel failed.\n");
@@ -307,9 +320,10 @@ void polly_getPTXKernelEntry(const char *KernelName, PollyGPUModule *Module,
   }
 
   /* Locate the kernel entry point. */
-  if (CuModuleGetFunctionFcnPtr(&((*Kernel)->Cuda), Module->Cuda, KernelName) !=
-          CUDA_SUCCESS) {
+  Res = CuModuleGetFunctionFcnPtr(&((*Kernel)->Cuda), Module->Cuda, KernelName);
+  if (Res != CUDA_SUCCESS) {
     fprintf(stdout, "Loading kernel function failed.\n");
+    fprintf(stdout, "The Error Message is %s.\n", getCudaDrvErrorString(Res));
     exit(-1);
   }
 }
@@ -363,35 +377,65 @@ void polly_allocateMemoryForHostAndDevice(
   CuMemAllocFcnPtr(&((*DevData)->Cuda), MemSize);
 }
 
+void polly_allocateMemoryForDevice(PollyGPUDevicePtr **DevData, int MemSize) {
+  CUresult Res;
+
+  *DevData = malloc(sizeof(PollyGPUDevicePtr));
+  if (*DevData == 0) {
+    fprintf(stdout, "Allocate memory for GPU device memory pointer failed.\n");
+    exit(-1);
+  }
+
+  Res = CuMemAllocFcnPtr(&((*DevData)->Cuda), MemSize);
+  if (Res != CUDA_SUCCESS) {
+    fprintf(stdout, "Allocate memory for GPU device memory pointer failed.\n");
+    fprintf(stdout, "The Error Message is %s.\n", getCudaDrvErrorString(Res));
+    exit(-1);
+  }
+}
+
 void polly_copyFromHostToDevice(PollyGPUDevicePtr *DevData, void *HostData,
                                 int MemSize) {
   CUdeviceptr CuDevData = DevData->Cuda;
-  CuMemcpyHtoDFcnPtr(CuDevData, HostData, MemSize);
+  CUresult Res = CuMemcpyHtoDFcnPtr(CuDevData, HostData, MemSize);
+  if (Res != CUDA_SUCCESS) {
+    fprintf(stdout, "Copying results from host to device memory failed.\n");
+    fprintf(stdout, "The Error Message is %s.\n", getCudaDrvErrorString(Res));
+    exit(-1);
+  }
 }
 
 void polly_copyFromDeviceToHost(void *HostData, PollyGPUDevicePtr *DevData,
                                 int MemSize) {
-  if (CuMemcpyDtoHFcnPtr(HostData, DevData->Cuda, MemSize) != CUDA_SUCCESS) {
+  CUdeviceptr CuDevData = DevData->Cuda;
+  CUresult Res = CuMemcpyDtoHFcnPtr(HostData, CuDevData, MemSize);
+  if (Res != CUDA_SUCCESS) {
     fprintf(stdout, "Copying results from device to host memory failed.\n");
+    fprintf(stdout, "The Error Message is %s.\n", getCudaDrvErrorString(Res));
     exit(-1);
   }
 }
 
 void polly_setKernelParameters(PollyGPUFunction *Kernel, int BlockWidth,
-                               int BlockHeight, PollyGPUDevicePtr *DevData) {
-  int ParamOffset = 0;
+                               int BlockHeight, PollyGPUDevicePtr *DevData,
+                               int *ParamOffset) {
+  void *Ptr;
 
   CuFuncSetBlockShapeFcnPtr(Kernel->Cuda, BlockWidth, BlockHeight, 1);
-  CuParamSetvFcnPtr(Kernel->Cuda, ParamOffset, &(DevData->Cuda),
+  Ptr = (void *)DevData->Cuda;
+  *ParamOffset = (*ParamOffset + __alignof(Ptr) - 1) & ~(__alignof(Ptr) - 1);
+  CuParamSetvFcnPtr(Kernel->Cuda, *ParamOffset, &(DevData->Cuda),
                     sizeof(DevData->Cuda));
-  ParamOffset += sizeof(DevData->Cuda);
-  CuParamSetSizeFcnPtr(Kernel->Cuda, ParamOffset);
+  *ParamOffset += sizeof(DevData->Cuda);
+  CuParamSetSizeFcnPtr(Kernel->Cuda, *ParamOffset);
 }
 
 void polly_launchKernel(PollyGPUFunction *Kernel, int GridWidth,
                         int GridHeight) {
-  if (CuLaunchGridFcnPtr(Kernel->Cuda, GridWidth, GridHeight) != CUDA_SUCCESS) {
+  CUresult Res = CuLaunchGridFcnPtr(Kernel->Cuda, GridWidth, GridHeight);
+  if (Res != CUDA_SUCCESS) {
     fprintf(stdout, "Launching CUDA kernel failed.\n");
+    fprintf(stdout, "The Error Message is %s.\n", getCudaDrvErrorString(Res));
     exit(-1);
   }
   CudaThreadSynchronizeFcnPtr();
@@ -399,31 +443,40 @@ void polly_launchKernel(PollyGPUFunction *Kernel, int GridWidth,
 }
 
 void polly_cleanupGPGPUResources(
-    void *HostData, PollyGPUDevicePtr *DevData, PollyGPUModule *Module,
-    PollyGPUContext *Context, PollyGPUFunction *Kernel) {
-  if (HostData) {
-    free(HostData);
-    HostData = 0;
-  }
-
+    PollyGPUDevicePtr *DevData, PollyGPUModule *Module,
+    PollyGPUContext *Context, PollyGPUFunction *Kernel, PollyGPUDevice *Device){
   if (DevData->Cuda) {
     CuMemFreeFcnPtr(DevData->Cuda);
+    DevData->Cuda = 0;
     free(DevData);
+    DevData = 0;
   }
 
   if (Module->Cuda) {
     CuModuleUnloadFcnPtr(Module->Cuda);
+    Module->Cuda = 0;
     free(Module);
+    Module = 0;
   }
 
   if (Context->Cuda) {
     CuCtxDestroyFcnPtr(Context->Cuda);
+    Context->Cuda = 0;
     free(Context);
+    Context = 0;
   }
 
   if (Kernel) {
     free(Kernel);
+    Kernel = 0;
   }
+
+  if (Device) {
+    free(Device);
+    Device = 0;
+  }
+
+  CudaDeviceResetFcnPtr();
 
   dlclose(HandleCuda);
   dlclose(HandleCudaRT);

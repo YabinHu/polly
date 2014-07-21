@@ -48,7 +48,7 @@
  *   PollyGPUModule *Module;
  *   PollyGPUFunction *Kernel;
  *   PollyGPUDevice *Device;
- *   PollyGPUDevicePtr *PtrDevData;
+ *   PollyGPUDevicePtr *DevData;
  *   int *HostData;
  *   PollyGPUEvent *Start;
  *   PollyGPUEvent *Stop;
@@ -58,13 +58,15 @@
  *   int BlockHeight = 16;
  *   int GridWidth = 8;
  *   int GridHeight = 8;
+ *   void *ParamOffset;
  *
  *   MemSize = 256*64*sizeof(int);
  *   polly_initDevice(&Context, &Device);
  *   polly_getPTXModule(KernelString, &Module);
  *   polly_getPTXKernelEntry(Entry, Module, &Kernel);
  *   polly_allocateMemoryForHostAndDevice(&HostData, &DevData, MemSize);
- *   polly_setKernelParameters(Kernel, BlockWidth, BlockHeight, DevData);
+ *   polly_setKernelParameters(Kernel, BlockWidth, BlockHeight, DevData,
+ *                             ParamOffset);
  *   polly_startTimerByCudaEvent(&Start, &Stop);
  *   polly_launchKernel(Kernel, GridWidth, GridHeight);
  *   polly_copyFromDeviceToHost(HostData, DevData, MemSize);
@@ -95,12 +97,15 @@ void polly_copyFromDeviceToHost(void *HostData, PollyGPUDevicePtr *DevData,
 void polly_allocateMemoryForHostAndDevice(void **HostData,
                                           PollyGPUDevicePtr **DevData,
                                           int MemSize);
+void polly_allocateMemoryForDevice(PollyGPUDevicePtr **DevData, int MemSize);
 void polly_setKernelParameters(PollyGPUFunction *Kernel, int BlockWidth,
-                               int BlockHeight, PollyGPUDevicePtr *DevData);
+                               int BlockHeight, PollyGPUDevicePtr *DevData,
+                               int *ParamOffset);
 void polly_launchKernel(PollyGPUFunction *Kernel, int GridWidth,
                         int GridHeight);
-void polly_cleanupGPGPUResources(void *HostData, PollyGPUDevicePtr *DevData,
+void polly_cleanupGPGPUResources(PollyGPUDevicePtr *DevData,
                                  PollyGPUModule *Module,
                                  PollyGPUContext *Context,
-                                 PollyGPUFunction *Kernel);
+                                 PollyGPUFunction *Kernel,
+                                 PollyGPUDevice *Device);
 #endif /* GPUJIT_H_ */
