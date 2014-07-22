@@ -177,6 +177,10 @@ void IslPTXGenerator::buildGPUKernel() {
   ext.guard = nullptr;
   ext.tree = nullptr;
   ext.prog = nullptr;
+
+  isl_options_set_schedule_outer_coincidence(Ctx, 1);
+  isl_options_set_schedule_maximize_band_depth(Ctx, 1);
+
   if (generate_gpu(Ctx, Scop, Options, &ext) < 0) {
     errs() << "GPGPU code geneation failed.\n";
     return;
