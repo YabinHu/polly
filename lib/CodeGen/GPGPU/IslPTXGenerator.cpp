@@ -687,10 +687,10 @@ void IslPTXGenerator::copyArraysToDevice(ValueToValueMapTy &VMap) {
       AllocaInst *TempHData = Builder.CreateAlloca(BaseAddr->getType(), 0, "");
       Builder.CreateStore(BaseAddr, TempHData);
       HData = Builder.CreateBitCast(TempHData, getI8PtrType(), "host_scalar");
+      VMap[VMap[BaseAddr]] = HData;
     } else
       HData = Builder.CreateBitCast(BaseAddr, getI8PtrType(), HostName);
 
-    VMap[VMap[BaseAddr]] = HData;
     Value *ArraySize =
         getArraySize(&Prog->array[i], isl_set_copy(Prog->context));
     createCallCopyFromHostToDevice(VMap[BaseAddr], HData, ArraySize);
@@ -725,6 +725,13 @@ void IslPTXGenerator::copyArraysFromDevice(ValueToValueMapTy VMap) {
     Value *BaseAddr = getBaseAddressByName(ArrayName);
     Value *ArraySize =
         getArraySize(&Prog->array[i], isl_set_copy(Prog->context));
+
+    if (!VMap[VMap[BaseAddr]]) {
+      std::string HostName("host_");
+      HostName.append(ArrayName);
+      Value *HData = Builder.CreateBitCast(BaseAddr, getI8PtrType(), HostName);
+      VMap[VMap[BaseAddr]] = HData;
+    }
 
     createCallCopyFromDeviceToHost(VMap[VMap[BaseAddr]], VMap[BaseAddr],
                                    ArraySize);
