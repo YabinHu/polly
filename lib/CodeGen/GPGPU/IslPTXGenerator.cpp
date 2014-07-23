@@ -109,13 +109,19 @@ void IslPTXGenerator::initializeBaseAddresses() {
       BaseAddresses.insert(const_cast<Value *>(Acc->getBaseAddr()));
 }
 
+/* The arguments are placed in the following order:
+ * - the arrays accessed by the kernel
+ * - the parameters
+ * - the host loop iterators
+*/
 Function *IslPTXGenerator::createSubfunctionDefinition(int NumMemAccs,
-                                                       int NumVars) {
+                                                       int NumVars,
+                                                       int NumHostIters) {
   Module *M = getModule();
   Function *F = Builder.GetInsertBlock()->getParent();
   std::vector<Type *> Arguments;
 
-  for (int i = 0; i < NumMemAccs + NumVars; i++)
+  for (int i = 0; i < NumMemAccs + NumVars + NumHostIters; i++)
     Arguments.push_back(Builder.getInt8PtrTy());
 
   FunctionType *FT = FunctionType::get(Builder.getVoidTy(), Arguments, false);
@@ -130,11 +136,12 @@ Function *IslPTXGenerator::createSubfunctionDefinition(int NumMemAccs,
   for (Function::arg_iterator AI = FN->arg_begin(); AI != FN->arg_end(); ++AI) {
     if (j < NumMemAccs) {
       AI->setName("ptx.Array");
-      j++;
-      continue;
-    }
+    } else if (j < NumMemAccs + NumVars) {
+      AI->setName("ptx.Var");
+    } else
+      AI->setName("ptx.HostIter");
 
-    AI->setName("ptx.Var");
+    j++;
   }
 
   return FN;
@@ -197,12 +204,29 @@ void IslPTXGenerator::buildGPUKernel() {
 void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
                                         Function **Subfunction) {
 
-  int NumMemAccs, NumVars;
   assert(Kernel && "Kernel should have been set correctly.");
-  NumMemAccs = Kernel->n_array;
-  NumVars = Kernel->n_var;
+  int NumMemAccs = 0;
+  int NumVars = Kernel->n_var;
+  int NumHostIters = 0;
 
-  Function *F = createSubfunctionDefinition(NumMemAccs, NumVars);
+  isl_space *Space;
+
+  for (int i = 0; i < Prog->n_array; ++i) {
+    Space = isl_space_copy(Prog->array[i].space);
+    isl_set *Arr = isl_union_set_extract_set(Kernel->arrays, Space);
+    int Empty = isl_set_plain_is_empty(Arr);
+    isl_set_free(Arr);
+    if (!Empty)
+      ++NumMemAccs;
+  }
+
+  Space = isl_union_set_get_space(Kernel->arrays);
+  NumVars = isl_space_dim(Space, isl_dim_param);
+  isl_space_free(Space);
+
+  NumHostIters = isl_space_dim(Kernel->space, isl_dim_set);
+
+  Function *F = createSubfunctionDefinition(NumMemAccs, NumVars, NumHostIters);
 
   Module *M = getModule();
   LLVMContext &Context = F->getContext();

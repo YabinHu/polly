@@ -216,7 +216,9 @@ private:
   /// @param NumMemAccs   The number of memory accesses which will be copied
   //                      from host to device.
   /// @param NumArgs      The number of parameters of this scop.
-  Function *createSubfunctionDefinition(int NumMemAccs, int NumArgs);
+  /// @param NumHostIters The number of host loop iterators.
+  Function *createSubfunctionDefinition(int NumMemAccs, int NumArgs,
+                                        int NumHostIters);
 
   /// @brief Get the Value of CUDA block X-dimension.
   Value *getCUDABlockDimX();
