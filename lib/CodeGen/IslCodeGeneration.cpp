@@ -1016,13 +1016,27 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   isl_id_free(Id);
   assert(Kernel->tree && "We should have got a kernel isl_ast_node.");
   print_ast_node_as_c_format(Kernel->tree);
+
   PTXGen->startGeneration(Kernel, VMap, &KernelBody);
   BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
   Builder.SetInsertPoint(KernelBody);
 
   Function *FN = Builder.GetInsertBlock()->getParent();
   PTXGen->getDeviceArrayBaseAddressMap(GMap, FN);
+
+  // We should fill the IDToValue before this create(node) call.
+  for (int i = 0; i < Kernel->n_gpuid; ++i) {
+    isl_id *GPUId = Kernel->gpuid[i];
+    const char *Name = isl_id_get_name(GPUId);
+    Value *IDValue = PTXGen->getValueOfGPUID(Name);
+    IDToValue[GPUId] = IDValue;
+  }
+
   create(isl_ast_node_copy(Kernel->tree));
+
+  // Erase the id to value mapping for gpu ids.
+  for (int i = 0; i < Kernel->n_gpuid; ++i)
+    IDToValue.erase(Kernel->gpuid[i]);
 
   // Set back the insert point to host end code.
   Builder.SetInsertPoint(AfterLoop);
@@ -1037,39 +1051,6 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   PTXGen->finishGeneration(FN);
 
   isl_ast_node_free(Node);
-}
-
-static void collect_id_from_ast_expr(__isl_keep isl_ast_expr *Expr,
-                                     isl_id **IdList, unsigned &Pos) {
-  if (isl_ast_expr_get_type(Expr) == isl_ast_expr_op) {
-    int n = isl_ast_expr_get_op_n_arg(Expr);
-    for (int i = 0; i < n; i++) {
-      isl_ast_expr *IdExpr = isl_ast_expr_get_op_arg(Expr, i);
-      collect_id_from_ast_expr(IdExpr, IdList, Pos);
-      isl_ast_expr_free(IdExpr);
-    }
-  }
-
-  if (isl_ast_expr_get_type(Expr) == isl_ast_expr_id) {
-    isl_id *Id = isl_ast_expr_get_id(Expr);
-    const char *Name = isl_id_get_name(Id);
-    if (!strcmp(Name, "b0") || !strcmp(Name, "b1") || !strcmp(Name, "t0") ||
-        !strcmp(Name, "t1") || !strcmp(Name, "t2")) {
-      IdList[Pos] = Id;
-      ++Pos;
-    } else
-      isl_id_free(Id);
-  }
-}
-
-static void collect_id_list_from_ast_expr(__isl_keep isl_ast_expr *Expr,
-                                          isl_id **IdList, unsigned &Pos) {
-  int n = isl_ast_expr_get_op_n_arg(Expr);
-  for (int i = 1; i < n; i++) {
-    isl_ast_expr *IdExpr = isl_ast_expr_get_op_arg(Expr, i);
-    collect_id_from_ast_expr(IdExpr, IdList, Pos);
-    isl_ast_expr_free(IdExpr);
-  }
 }
 #endif
 
@@ -1098,21 +1079,10 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
       (struct ppcg_kernel_stmt *)isl_id_get_user(Anno);
   isl_id_free(Anno);
 
-  isl_id **IdList = (isl_id **)malloc(5 * sizeof(isl_id *));
-  unsigned Pos = 0;
-  for (int i = 0; i < 5; ++i)
-    IdList[i] = nullptr;
   switch (KernelStmt->type) {
-  case ppcg_kernel_domain: {
+  case ppcg_kernel_domain:
     Stmt = KernelStmt->u.d.stmt->stmt;
-    collect_id_list_from_ast_expr(Expr, IdList, Pos);
-    for (int i = 0; i < Pos; i++) {
-      isl_id *GPUId = IdList[i];
-      const char *Name = isl_id_get_name(GPUId);
-      Value *IDValue = PTXGen->getValueOfGPUID(Name);
-      IDToValue[GPUId] = IDValue;
-    }
-  } break;
+    break;
   case ppcg_kernel_copy:
     // createKernelCopy(KernelStmt);
     isl_ast_expr_free(Expr);
@@ -1140,12 +1110,6 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
   }
   isl_id_to_ast_expr *Indexes = KernelStmt->u.d.ref2expr;
   BlockGenerator::generate(Builder, *Stmt, VMap, LTS, P, &ExprBuilder, Indexes);
-  for (int i = 0; i < Pos; i++) {
-    isl_id *GPUId = IdList[i];
-    IDToValue.erase(GPUId);
-    isl_id_free(GPUId);
-  }
-  free(IdList);
 #else
   BlockGenerator::generate(Builder, *Stmt, VMap, LTS, P);
 #endif
