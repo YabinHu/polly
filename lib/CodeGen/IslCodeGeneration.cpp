@@ -1040,6 +1040,8 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   // Set back the host IDToValue.
   IDToValue.clear();
   IDToValue = IDToValueBefore;
+
+  // Clear the dominator tree of the kernel function.
   clearDomtree((*KernelBody).getParent()->getParent(),
                P->getAnalysis<DominatorTreeWrapperPass>().getDomTree());
 
