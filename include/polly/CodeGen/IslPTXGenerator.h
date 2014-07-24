@@ -103,7 +103,6 @@ private:
   struct ppcg_options *Options;
 
   /// @brief Parameters used for launching PTX kernel.
-  int GridWidth, GridHeight, BlockWidth, BlockHeight;
   Value *GridDimX, *GridDimY;
 
   /// @brief Size of the output array in bytes.
