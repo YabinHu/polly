@@ -1,10 +1,9 @@
-/******************** GPUJIT.cpp - GPUJIT Execution Engine                     \
- * ********************/
+/******************** GPUJIT.cpp - GPUJIT Execution Engine ********************/
 /*                                                                            */
 /*                     The LLVM Compiler Infrastructure                       */
 /*                                                                            */
 /* This file is dual licensed under the MIT and the University of Illinois    */
-/* Open Source License. See LICENSE.TXT for details.                         */
+/* Open Source License. See LICENSE.TXT for details.                          */
 /*                                                                            */
 /******************************************************************************/
 /*                                                                            */
@@ -93,8 +92,9 @@ static CuCtxCreateFcnTy *CuCtxCreateFcnPtr;
 typedef CUresult CUDAAPI CuDeviceGetFcnTy(CUdevice *, int);
 static CuDeviceGetFcnTy *CuDeviceGetFcnPtr;
 
-typedef CUresult CUDAAPI CuModuleLoadDataExFcnTy(
-    CUmodule *, const void *, unsigned int, CUjit_option *, void **);
+typedef CUresult CUDAAPI CuModuleLoadDataExFcnTy(CUmodule *, const void *,
+                                                 unsigned int, CUjit_option *,
+                                                 void **);
 static CuModuleLoadDataExFcnTy *CuModuleLoadDataExFcnPtr;
 
 typedef CUresult CUDAAPI
@@ -242,8 +242,8 @@ static int initialDeviceAPIs() {
   CudaThreadSynchronizeFcnPtr = (CudaThreadSynchronizeFcnTy *)getAPIHandle(
       HandleCudaRT, "cudaThreadSynchronize");
 
-  CudaDeviceResetFcnPtr = (CudaDeviceResetFcnTy *)getAPIHandle(
-      HandleCudaRT, "cudaDeviceReset");
+  CudaDeviceResetFcnPtr =
+      (CudaDeviceResetFcnTy *)getAPIHandle(HandleCudaRT, "cudaDeviceReset");
 
   return 1;
 }
@@ -302,7 +302,7 @@ void polly_getPTXModule(void *PTXBuffer, PollyGPUModule **Module) {
     exit(-1);
   }
 
-  Res = CuModuleLoadDataExFcnPtr(&((*Module)->Cuda), PTXBuffer, 0,0,0);
+  Res = CuModuleLoadDataExFcnPtr(&((*Module)->Cuda), PTXBuffer, 0, 0, 0);
   if (Res != CUDA_SUCCESS) {
     fprintf(stdout, "Loading ptx assembly text failed.\n");
     fprintf(stdout, "The Error Message is %s.\n", getCudaDrvErrorString(Res));
@@ -363,8 +363,9 @@ void polly_stopTimerByCudaEvent(PollyGPUEvent *Start, PollyGPUEvent *Stop,
   free(Stop);
 }
 
-void polly_allocateMemoryForHostAndDevice(
-    void **HostData, PollyGPUDevicePtr **DevData, int MemSize) {
+void polly_allocateMemoryForHostAndDevice(void **HostData,
+                                          PollyGPUDevicePtr **DevData,
+                                          int MemSize) {
   if ((*HostData = (int *)malloc(MemSize)) == 0) {
     fprintf(stdout, "Could not allocate host memory.\n");
     exit(-1);
@@ -446,9 +447,11 @@ void polly_launchKernel(PollyGPUFunction *Kernel, int GridWidth,
   fprintf(stdout, "CUDA kernel launched.\n");
 }
 
-void polly_cleanupGPGPUResources(
-    PollyGPUDevicePtr *DevData, PollyGPUModule *Module,
-    PollyGPUContext *Context, PollyGPUFunction *Kernel, PollyGPUDevice *Device){
+void polly_cleanupGPGPUResources(PollyGPUDevicePtr *DevData,
+                                 PollyGPUModule *Module,
+                                 PollyGPUContext *Context,
+                                 PollyGPUFunction *Kernel,
+                                 PollyGPUDevice *Device) {
   if (DevData->Cuda) {
     CuMemFreeFcnPtr(DevData->Cuda);
     DevData->Cuda = 0;
