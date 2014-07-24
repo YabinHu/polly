@@ -1006,9 +1006,8 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
 
   BasicBlock::iterator KernelBody;
   IslPTXGenerator::ValueToValueMapTy VMap;
-  BasicBlock *AfterBB = 0;
 
-  // Backup the IDToValue;
+  // Backup the IDToValue.
   std::map<isl_id *, Value *> IDToValueBefore = IDToValue;
   IDToValue.clear();
   for (std::map<isl_id *, Value *>::iterator II = IDToValueBefore.begin(),
