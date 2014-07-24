@@ -1004,9 +1004,6 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
                                     int BackendType) {
   assert(BackendType == 0 && "We only support PTX codegen currently.");
 
-  BasicBlock::iterator KernelBody;
-  IslPTXGenerator::ValueToValueMapTy VMap;
-
   // Backup the IDToValue.
   std::map<isl_id *, Value *> IDToValueBefore = IDToValue;
   IDToValue.clear();
@@ -1024,7 +1021,8 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   assert(Kernel->tree && "We should have got a kernel isl_ast_node.");
   print_ast_node_as_c_format(Kernel->tree);
 
-  PTXGen->startGeneration(Kernel, VMap, IDToValue, &KernelBody);
+  BasicBlock::iterator KernelBody;
+  PTXGen->startGeneration(Kernel, IDToValue, &KernelBody);
   BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
   Builder.SetInsertPoint(KernelBody);
 

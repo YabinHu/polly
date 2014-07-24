@@ -219,8 +219,7 @@ void IslPTXGenerator::buildGPUKernel() {
   Prog = ext.prog;
 }
 
-void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
-                                        IDToValueTy &IDToValue,
+void IslPTXGenerator::createSubfunction(IDToValueTy &IDToValue,
                                         Function **Subfunction) {
 
   int NumMemAccs = 0, NumVars = 0, NumHostIters = 0;
@@ -393,13 +392,12 @@ void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
 }
 
 void IslPTXGenerator::startGeneration(struct ppcg_kernel *CurKernel,
-                                      ValueToValueMapTy &VMap,
                                       IDToValueTy &IDToValue,
                                       BasicBlock::iterator *KernelBody) {
   Function *SubFunction;
   BasicBlock::iterator PrevInsertPoint = Builder.GetInsertPoint();
   Kernel = CurKernel;
-  createSubfunction(VMap, IDToValue, &SubFunction);
+  createSubfunction(IDToValue, &SubFunction);
   *KernelBody = Builder.GetInsertPoint();
   Builder.SetInsertPoint(PrevInsertPoint);
 }

@@ -58,14 +58,12 @@ public:
 
   /// @brief Create a GPGPU parallel loop.
   ///
-  /// @param VMap         This map is filled by createParallelLoop(). It
-  ///                     maps the values in UsedValues to Values through which
-  ///                     their content is available within the loop body.
+  /// @param CurKernel    The current ppcg_kernel.
+  /// @param IDToValue    The kernel local isl_id to Value map.
   /// @param KernelBody   A pointer to an iterator that is set to point to the
   ///                     body of the created loop. It should be used to insert
   ///                     instructions that form the actual loop body.
-  void startGeneration(struct ppcg_kernel *CurKernel, ValueToValueMapTy &VMap,
-                       IDToValueTy &IDToValue,
+  void startGeneration(struct ppcg_kernel *CurKernel, IDToValueTy &IDToValue,
                        BasicBlock::iterator *KernelBody);
 
   /// @brief Execute the post-operations to build a GPGPU parallel loop.
@@ -195,14 +193,12 @@ private:
 
   /// @brief Create the CUDA subfunction.
   ///
-  /// @param VMap         This map that is filled by createSubfunction(). It
-  ///                     maps the values in UsedValues to Values through which
-  ///                     their content is available within the loop body.
+  /// @param IDToValue    The kernel local isl_id to Value map.
   /// @param SubFunction  The newly created SubFunction is returned here.
-  void createSubfunction(ValueToValueMapTy &VMap, IDToValueTy &IDToValue,
-                         Function **Subfunction);
+  void createSubfunction(IDToValueTy &IDToValue, Function **Subfunction);
 
   /// @brief Create the definition of the CUDA subfunction.
+  ///
   /// @param NumMemAccs   The number of memory accesses which will be copied
   ///                     from host to device.
   /// @param NumVars      The number of parameters of this scop.
