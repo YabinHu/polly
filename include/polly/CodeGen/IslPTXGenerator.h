@@ -172,9 +172,10 @@ private:
                                       Value *Size);
   void createCallCopyFromDeviceToHost(Value *HostData, Value *DeviceData,
                                       Value *Size);
-  void createCallSetKernelParameters(Value *Kernel, Value *BlockWidth,
-                                     Value *BlockHeight, Value *DeviceData,
+  void createCallSetKernelParameters(Value *Kernel, Value *DeviceData,
                                      Value *ParamOffset);
+  void createCallSetBlockShape(Value *Kernel, Value *BlockWidth,
+                               Value *BlockHeight, Value *BlockDepth);
   void createCallLaunchKernel(Value *Kernel, Value *GridWidth,
                               Value *GridHeight);
   void createCallStartTimerByCudaEvent(Value *StartEvent, Value *StopEvent);
