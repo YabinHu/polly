@@ -1054,10 +1054,6 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
 
   create(isl_ast_node_copy(Kernel->tree));
 
-  // Erase the id to value mapping for gpu ids.
-  for (int i = 0; i < Kernel->n_gpuid; ++i)
-    IDToValue.erase(Kernel->gpuid[i]);
-
   // Set back the host IDToValue.
   IDToValue.clear();
   IDToValue = IDToValueBefore;
