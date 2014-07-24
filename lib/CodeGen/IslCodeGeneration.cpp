@@ -1048,6 +1048,7 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   Builder.SetInsertPoint(AfterLoop);
   PTXGen->finishGeneration(FN);
 
+  GMap.clear();
   isl_ast_node_free(Node);
 }
 #endif
