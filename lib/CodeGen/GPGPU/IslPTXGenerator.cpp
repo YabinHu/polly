@@ -333,7 +333,7 @@ void IslPTXGenerator::createSubfunction(IDToValueTy &IDToValue,
 
   // We should fill the IDToValue before this create(node) call.
   for (int i = 0; i < Kernel->n_gpuid; ++i) {
-    isl_id *GPUId = Kernel->gpuid[i];
+    isl_id *GPUId = isl_id_copy(Kernel->gpuid[i]);
     std::string Name = isl_id_get_name(GPUId);
     Value *IDValue = GPUIDMap[Name];
     IDToValue[GPUId] = IDValue;
@@ -354,6 +354,7 @@ void IslPTXGenerator::createSubfunction(IDToValueTy &IDToValue,
       // type = isl_options_get_ast_iterator_type(Prog->ctx);
       for (int i = 0; i < NumHostIters; ++i) {
         isl_id *Id = isl_space_get_dim_id(Kernel->space, isl_dim_set, i);
+        IDToValue.erase(Id);
         const char *Name =
             isl_space_get_dim_name(Kernel->space, isl_dim_set, i);
         std::string HIName("device_");
