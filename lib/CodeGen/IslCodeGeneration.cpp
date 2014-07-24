@@ -1001,15 +1001,27 @@ static void clearDomtree(Function *F, DominatorTree &DT) {
 }
 
 static void createCopyOfIDToValue(std::map<isl_id *, Value *> &Origin,
-                             std::map<isl_id *, Value *> &Copy) {
+                                  std::map<isl_id *, Value *> &Copy) {
   Copy = Origin;
   Origin.clear();
-  for (std::map<isl_id *, Value *>::iterator II = Copy.begin(),
-                                             IE = Copy.end();
+  for (std::map<isl_id *, Value *>::iterator II = Copy.begin(), IE = Copy.end();
        II != IE; ++II) {
     isl_id *IdCopy = isl_id_copy(II->first);
     Origin[IdCopy] = II->second;
   }
+}
+
+static void restoreHostIDToValue(std::map<isl_id *, Value *> &Origin,
+                                 std::map<isl_id *, Value *> &Copy) {
+  // Make sure every isl_id we copied is freed.
+  for (std::map<isl_id *, Value *>::iterator II = Origin.begin(),
+                                             IE = Origin.end();
+       II != IE; ++II) {
+    isl_id_free(II->first);
+  }
+
+  Origin = Copy;
+  Copy.clear();
 }
 
 void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
@@ -1017,8 +1029,8 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   assert(BackendType == 0 && "We only support PTX codegen currently.");
 
   // Backup the IDToValue.
-  std::map<isl_id *, Value *> IDToValueBefore;
-  createCopyOfIDToValue(IDToValue, IDToValueBefore);
+  std::map<isl_id *, Value *> IDToValueBackup;
+  createCopyOfIDToValue(IDToValue, IDToValueBackup);
 
   // Generate kernel code in the subfunction.
   isl_id *Id = isl_ast_node_get_annotation(Node);
@@ -1038,8 +1050,7 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   create(isl_ast_node_copy(Kernel->tree));
 
   // Set back the host IDToValue.
-  IDToValue.clear();
-  IDToValue = IDToValueBefore;
+  restoreHostIDToValue(IDToValue, IDToValueBackup);
 
   // Clear the dominator tree of the kernel function.
   clearDomtree((*KernelBody).getParent()->getParent(),
