@@ -622,8 +622,6 @@ void IslPTXGenerator::createCallCopyFromDeviceToHost(Value *HostData,
 }
 
 void IslPTXGenerator::createCallSetKernelParameters(Value *Kernel,
-                                                    Value *BlockWidth,
-                                                    Value *BlockHeight,
                                                     Value *DeviceData,
                                                     Value *ParamOffset) {
   const char *Name = "polly_setKernelParameters";
@@ -635,16 +633,35 @@ void IslPTXGenerator::createCallSetKernelParameters(Value *Kernel,
     GlobalValue::LinkageTypes Linkage = Function::ExternalLinkage;
     std::vector<Type *> Args;
     Args.push_back(getGPUFunctionPtrType());
-    Args.push_back(getInt64Type());
-    Args.push_back(getInt64Type());
     Args.push_back(getPtrGPUDevicePtrType());
     Args.push_back(PointerType::getUnqual(getInt64Type()));
     FunctionType *Ty = FunctionType::get(Builder.getVoidTy(), Args, false);
     F = Function::Create(Ty, Linkage, Name, M);
   }
 
-  Builder.CreateCall5(F, Kernel, BlockWidth, BlockHeight, DeviceData,
-                      ParamOffset);
+  Builder.CreateCall3(F, Kernel, DeviceData, ParamOffset);
+}
+
+void IslPTXGenerator::createCallSetBlockShape(Value *Kernel, Value *BlockWidth,
+                                              Value *BlockHeight,
+                                              Value *BlockDepth) {
+  const char *Name = "polly_setBlockShape";
+  Module *M = getModule();
+  Function *F = M->getFunction(Name);
+
+  // If F is not available, declare it.
+  if (!F) {
+    GlobalValue::LinkageTypes Linkage = Function::ExternalLinkage;
+    std::vector<Type *> Args;
+    Args.push_back(getGPUFunctionPtrType());
+    Args.push_back(getInt64Type());
+    Args.push_back(getInt64Type());
+    Args.push_back(getInt64Type());
+    FunctionType *Ty = FunctionType::get(Builder.getVoidTy(), Args, false);
+    F = Function::Create(Ty, Linkage, Name, M);
+  }
+
+  Builder.CreateCall4(F, Kernel, BlockWidth, BlockHeight, BlockDepth);
 }
 
 Value *IslPTXGenerator::getBaseAddressByName(std::string Name) {
@@ -700,8 +717,7 @@ void IslPTXGenerator::allocateDeviceArrays(Value *CUKernel,
     std::string DevName("device_");
     DevName.append(ArrayName);
     LoadInst *DData = Builder.CreateLoad(PtrDevData, DevName);
-    createCallSetKernelParameters(CUKernel, getCUDABlockDimX(),
-                                  getCUDABlockDimY(), DData, PtrParamOffset);
+    createCallSetKernelParameters(CUKernel, DData, PtrParamOffset);
     Value *BaseAddr = getBaseAddressByName(ArrayName);
     VMap[BaseAddr] = DData;
   }
@@ -1131,6 +1147,10 @@ void IslPTXGenerator::finishGeneration(Function *F) {
 
   // Create the start and end timer and record the start time.
   createCallStartTimerByCudaEvent(PtrCUStartEvent, PtrCUStopEvent);
+
+  // Set kernel block shape.
+  createCallSetBlockShape(CUKernel, getCUDABlockDimX(), getCUDABlockDimY(),
+                          getCUDABlockDimZ());
 
   // Launch the GPU kernel.
   setLaunchingParameters();

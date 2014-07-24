@@ -417,18 +417,21 @@ void polly_copyFromDeviceToHost(void *HostData, PollyGPUDevicePtr *DevData,
   }
 }
 
-void polly_setKernelParameters(PollyGPUFunction *Kernel, int BlockWidth,
-                               int BlockHeight, PollyGPUDevicePtr *DevData,
-                               int *ParamOffset) {
+void polly_setKernelParameters(PollyGPUFunction *Kernel,
+                               PollyGPUDevicePtr *DevData, int *ParamOffset) {
   void *Ptr;
 
-  CuFuncSetBlockShapeFcnPtr(Kernel->Cuda, BlockWidth, BlockHeight, 1);
   Ptr = (void *)DevData->Cuda;
   *ParamOffset = (*ParamOffset + __alignof(Ptr) - 1) & ~(__alignof(Ptr) - 1);
   CuParamSetvFcnPtr(Kernel->Cuda, *ParamOffset, &(DevData->Cuda),
                     sizeof(DevData->Cuda));
   *ParamOffset += sizeof(DevData->Cuda);
   CuParamSetSizeFcnPtr(Kernel->Cuda, *ParamOffset);
+}
+
+void polly_setBlockShape(PollyGPUFunction *Kernel, int BlockWidth,
+                         int BlockHeight, int BlockDepth) {
+  CuFuncSetBlockShapeFcnPtr(Kernel->Cuda, BlockWidth, BlockHeight, BlockDepth);
 }
 
 void polly_launchKernel(PollyGPUFunction *Kernel, int GridWidth,

@@ -56,6 +56,7 @@
  *   int MemSize;
  *   int BlockWidth = 16;
  *   int BlockHeight = 16;
+ *   int BlockDepth = 1;
  *   int GridWidth = 8;
  *   int GridHeight = 8;
  *   void *ParamOffset;
@@ -65,8 +66,8 @@
  *   polly_getPTXModule(KernelString, &Module);
  *   polly_getPTXKernelEntry(Entry, Module, &Kernel);
  *   polly_allocateMemoryForHostAndDevice(&HostData, &DevData, MemSize);
- *   polly_setKernelParameters(Kernel, BlockWidth, BlockHeight, DevData,
- *                             ParamOffset);
+ *   polly_setKernelParameters(Kernel, DevData, ParamOffset);
+ *   polly_setBlockShape(Kernel, BlockWidth, BlockHeight, BlockDepth);
  *   polly_startTimerByCudaEvent(&Start, &Stop);
  *   polly_launchKernel(Kernel, GridWidth, GridHeight);
  *   polly_copyFromDeviceToHost(HostData, DevData, MemSize);
@@ -98,9 +99,10 @@ void polly_allocateMemoryForHostAndDevice(void **HostData,
                                           PollyGPUDevicePtr **DevData,
                                           int MemSize);
 void polly_allocateMemoryForDevice(PollyGPUDevicePtr **DevData, int MemSize);
-void polly_setKernelParameters(PollyGPUFunction *Kernel, int BlockWidth,
-                               int BlockHeight, PollyGPUDevicePtr *DevData,
-                               int *ParamOffset);
+void polly_setKernelParameters(PollyGPUFunction *Kernel,
+                               PollyGPUDevicePtr *DevData, int *ParamOffset);
+void polly_setBlockShape(PollyGPUFunction *Kernel, int BlockWidth,
+                         int BlockHeight, int BlockDepth);
 void polly_launchKernel(PollyGPUFunction *Kernel, int GridWidth,
                         int GridHeight);
 void polly_cleanupGPGPUResources(PollyGPUDevicePtr *DevData,
