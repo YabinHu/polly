@@ -277,17 +277,21 @@ void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
   int NumGrid = isl_multi_pw_aff_dim(Kernel->grid_size, isl_dim_set);
   int NumBlock = Kernel->n_block;
 
+  std::map<std::string, Value *> GPUIDMap;
   switch (NumGrid) {
   case 1: {
-    BIDx = Builder.CreateCall(GetCtaidX);
+    Value *BIDx = Builder.CreateCall(GetCtaidX);
     BIDx = Builder.CreateIntCast(BIDx, Ty, false);
+    GPUIDMap["b0"] = cast<Value>(BIDx);
     break;
   }
   case 2: {
-    BIDx = Builder.CreateCall(GetCtaidX);
+    Value *BIDx = Builder.CreateCall(GetCtaidX);
     BIDx = Builder.CreateIntCast(BIDx, Ty, false);
-    BIDy = Builder.CreateCall(GetCtaidY);
+    Value *BIDy = Builder.CreateCall(GetCtaidY);
     BIDy = Builder.CreateIntCast(BIDy, Ty, false);
+    GPUIDMap["b0"] = cast<Value>(BIDx);
+    GPUIDMap["b1"] = cast<Value>(BIDy);
     break;
   }
   default:
@@ -297,29 +301,43 @@ void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
 
   switch (NumBlock) {
   case 1: {
-    TIDx = Builder.CreateCall(GetTidX);
+    Value *TIDx = Builder.CreateCall(GetTidX);
     TIDx = Builder.CreateIntCast(TIDx, Ty, false);
+    GPUIDMap["t0"] = cast<Value>(TIDx);
     break;
   }
   case 2: {
-    TIDx = Builder.CreateCall(GetTidX);
+    Value *TIDx = Builder.CreateCall(GetTidX);
     TIDx = Builder.CreateIntCast(TIDx, Ty, false);
-    TIDy = Builder.CreateCall(GetTidY);
+    Value *TIDy = Builder.CreateCall(GetTidY);
     TIDy = Builder.CreateIntCast(TIDy, Ty, false);
+    GPUIDMap["t0"] = cast<Value>(TIDx);
+    GPUIDMap["t1"] = cast<Value>(TIDy);
     break;
   }
   case 3: {
-    TIDx = Builder.CreateCall(GetTidX);
+    Value *TIDx = Builder.CreateCall(GetTidX);
     TIDx = Builder.CreateIntCast(TIDx, Ty, false);
-    TIDy = Builder.CreateCall(GetTidY);
+    Value *TIDy = Builder.CreateCall(GetTidY);
     TIDy = Builder.CreateIntCast(TIDy, Ty, false);
-    TIDz = Builder.CreateCall(GetTidZ);
+    Value *TIDz = Builder.CreateCall(GetTidZ);
     TIDz = Builder.CreateIntCast(TIDz, Ty, false);
+    GPUIDMap["t0"] = cast<Value>(TIDx);
+    GPUIDMap["t1"] = cast<Value>(TIDy);
+    GPUIDMap["t2"] = cast<Value>(TIDz);
     break;
   }
   default:
     errs() << "Set thread id error.\n";
     break;
+  }
+
+  // We should fill the IDToValue before this create(node) call.
+  for (int i = 0; i < Kernel->n_gpuid; ++i) {
+    isl_id *GPUId = Kernel->gpuid[i];
+    std::string Name = isl_id_get_name(GPUId);
+    Value *IDValue = GPUIDMap[Name];
+    IDToValue[GPUId] = IDValue;
   }
 
   isl_space *Space = isl_union_set_get_space(Kernel->arrays);
@@ -372,25 +390,6 @@ void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
   // Reset insert point to continuation of the kernel body.
   Builder.SetInsertPoint(KernelBody);
   *Subfunction = F;
-}
-
-Value *IslPTXGenerator::getValueOfGPUID(const char *Name) {
-  if (!strcmp(Name, "b0"))
-    return cast<Value>(BIDx);
-
-  if (!strcmp(Name, "b1"))
-    return cast<Value>(BIDy);
-
-  if (!strcmp(Name, "t0"))
-    return cast<Value>(TIDx);
-
-  if (!strcmp(Name, "t1"))
-    return cast<Value>(TIDy);
-
-  if (!strcmp(Name, "t2"))
-    return cast<Value>(TIDz);
-
-  return nullptr;
 }
 
 void IslPTXGenerator::startGeneration(struct ppcg_kernel *CurKernel,
