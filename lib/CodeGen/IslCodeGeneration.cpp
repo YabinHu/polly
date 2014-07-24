@@ -35,6 +35,7 @@
 #include "polly/TempScopInfo.h"
 #include "GPGPU/gpu.h"
 #include "GPGPU/schedule.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/ScalarEvolutionExpander.h"
@@ -1000,12 +1001,33 @@ Value *IslNodeBuilder::getGridSize(struct ppcg_kernel *Kernel, int Pos) {
   return Res;
 }
 
+static void clearDomtree(Function *F, DominatorTree &DT) {
+  DomTreeNode *N = DT.getNode(&F->getEntryBlock());
+  std::vector<BasicBlock *> Nodes;
+  for (po_iterator<DomTreeNode *> I = po_begin(N), E = po_end(N); I != E; ++I)
+    Nodes.push_back(I->getBlock());
+
+  for (std::vector<BasicBlock *>::iterator I = Nodes.begin(), E = Nodes.end();
+       I != E; ++I)
+    DT.eraseNode(*I);
+}
+
 void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
                                     int BackendType) {
   assert(BackendType == 0 && "We only support PTX codegen currently.");
 
   BasicBlock::iterator KernelBody;
   IslPTXGenerator::ValueToValueMapTy VMap;
+
+  // Backup the IDToValue.
+  std::map<isl_id *, Value *> IDToValueBefore = IDToValue;
+  IDToValue.clear();
+  for (std::map<isl_id *, Value *>::iterator II = IDToValueBefore.begin(),
+                                             IE = IDToValueBefore.end();
+       II != IE; ++II) {
+    isl_id *IdCopy = isl_id_copy(II->first);
+    IDToValue[IdCopy] = II->second;
+  }
 
   // Generate kernel code in the subfunction.
   isl_id *Id = isl_ast_node_get_annotation(Node);
@@ -1015,7 +1037,7 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   if (PTXGen->getOptions()->debug->dump_ast_node)
     print_ast_node_as_c_format(Kernel->tree);
 
-  PTXGen->startGeneration(Kernel, VMap, &KernelBody);
+  PTXGen->startGeneration(Kernel, VMap, IDToValue, &KernelBody);
   BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
   Builder.SetInsertPoint(KernelBody);
 
@@ -1035,6 +1057,14 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   // Erase the id to value mapping for gpu ids.
   for (int i = 0; i < Kernel->n_gpuid; ++i)
     IDToValue.erase(Kernel->gpuid[i]);
+
+  // Set back the host IDToValue.
+  IDToValue.clear();
+  IDToValue = IDToValueBefore;
+
+  // Clear the dominator tree of the kernel function.
+  clearDomtree((*KernelBody).getParent()->getParent(),
+               P->getAnalysis<DominatorTreeWrapperPass>().getDomTree());
 
   // Set back the insert point to host end code.
   Builder.SetInsertPoint(AfterLoop);
