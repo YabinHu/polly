@@ -1063,16 +1063,6 @@ void IslPTXGenerator::eraseUnusedFunctions(Function *SubFunction) {
   }
 }
 
-static unsigned getArraySizeInBytes(const ArrayType *AT) {
-  unsigned Bytes = AT->getNumElements();
-  if (const ArrayType *T = dyn_cast<ArrayType>(AT->getElementType()))
-    Bytes *= getArraySizeInBytes(T);
-  else
-    Bytes *= AT->getElementType()->getPrimitiveSizeInBits() / 8;
-
-  return Bytes;
-}
-
 void IslPTXGenerator::setLaunchingParameters(Value *GridSizeX,
                                              Value *GridSizeY) {
   GridDimX = GridSizeX;
