@@ -114,9 +114,26 @@ void IslPTXGenerator::initializeBaseAddresses() {
  * - the parameters
  * - the host loop iterators
 */
-Function *IslPTXGenerator::createSubfunctionDefinition(int NumMemAccs,
-                                                       int NumVars,
-                                                       int NumHostIters) {
+Function *IslPTXGenerator::createSubfunctionDefinition(int &NumMemAccs,
+                                                       int &NumVars,
+                                                       int &NumHostIters,
+                                                       IDToValueTy &IDToValue) {
+  assert(Kernel && "Kernel should have been set correctly.");
+
+  isl_space *Space;
+  for (int i = 0; i < Prog->n_array; ++i) {
+    Space = isl_space_copy(Prog->array[i].space);
+    isl_set *Arr = isl_union_set_extract_set(Kernel->arrays, Space);
+    int Empty = isl_set_plain_is_empty(Arr);
+    isl_set_free(Arr);
+    if (!Empty)
+      ++NumMemAccs;
+  }
+
+  Space = isl_union_set_get_space(Kernel->arrays);
+  NumVars = isl_space_dim(Space, isl_dim_param);
+  NumHostIters = isl_space_dim(Kernel->space, isl_dim_set);
+
   Module *M = getModule();
   Function *F = Builder.GetInsertBlock()->getParent();
   std::vector<Type *> Arguments;
@@ -134,16 +151,17 @@ Function *IslPTXGenerator::createSubfunctionDefinition(int NumMemAccs,
 
   int j = 0;
   for (Function::arg_iterator AI = FN->arg_begin(); AI != FN->arg_end(); ++AI) {
-    if (j < NumMemAccs) {
+    if (j < NumMemAccs)
       AI->setName("ptx.Array");
-    } else if (j < NumMemAccs + NumVars) {
+    else if (j < NumMemAccs + NumVars)
       AI->setName("ptx.Var");
-    } else
+    else
       AI->setName("ptx.HostIter");
 
     j++;
   }
 
+  isl_space_free(Space);
   return FN;
 }
 
@@ -202,31 +220,12 @@ void IslPTXGenerator::buildGPUKernel() {
 }
 
 void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
+                                        IDToValueTy &IDToValue,
                                         Function **Subfunction) {
 
-  assert(Kernel && "Kernel should have been set correctly.");
-  int NumMemAccs = 0;
-  int NumVars = Kernel->n_var;
-  int NumHostIters = 0;
-
-  isl_space *Space;
-
-  for (int i = 0; i < Prog->n_array; ++i) {
-    Space = isl_space_copy(Prog->array[i].space);
-    isl_set *Arr = isl_union_set_extract_set(Kernel->arrays, Space);
-    int Empty = isl_set_plain_is_empty(Arr);
-    isl_set_free(Arr);
-    if (!Empty)
-      ++NumMemAccs;
-  }
-
-  Space = isl_union_set_get_space(Kernel->arrays);
-  NumVars = isl_space_dim(Space, isl_dim_param);
-  isl_space_free(Space);
-
-  NumHostIters = isl_space_dim(Kernel->space, isl_dim_set);
-
-  Function *F = createSubfunctionDefinition(NumMemAccs, NumVars, NumHostIters);
+  int NumMemAccs = 0, NumVars = 0, NumHostIters = 0;
+  Function *F =
+      createSubfunctionDefinition(NumMemAccs, NumVars, NumHostIters, IDToValue);
 
   Module *M = getModule();
   LLVMContext &Context = F->getContext();
@@ -245,12 +244,6 @@ void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
   DT.addNewBlock(ExitBB, HeaderBB);
   DT.addNewBlock(BodyBB, HeaderBB);
   Builder.SetInsertPoint(HeaderBB);
-
-  // Create Value* map of host array to its device counterpart.
-  // createValueMap(VMap, Kernel->array);
-
-  // Create Value* map of host scalar variable to its device counterpart.
-  // createValueMap(VMap, Kernel->var);
 
   // Add blockID, threadID, grid size, block size, etc.
   // FIXME: These intrinsics should be inserted on-demand. However, we insert
@@ -329,6 +322,34 @@ void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
     break;
   }
 
+  isl_space *Space = isl_union_set_get_space(Kernel->arrays);
+  int j = 0;
+  for (Function::arg_iterator AI = F->arg_begin(); AI != F->arg_end(); ++AI) {
+    if (j < NumMemAccs) {
+      ++j;
+      continue;
+    } else if (j < NumMemAccs + NumVars) {
+      for (int i = 0; i < NumVars; ++i) {
+        isl_id *Id = isl_space_get_dim_id(Space, isl_dim_param, i);
+        isl_id_free(Id);
+      }
+    } else {
+      // type = isl_options_get_ast_iterator_type(Prog->ctx);
+      for (int i = 0; i < NumHostIters; ++i) {
+        isl_id *Id = isl_space_get_dim_id(Kernel->space, isl_dim_set, i);
+        const char *Name =
+            isl_space_get_dim_name(Kernel->space, isl_dim_set, i);
+        std::string HIName("device_");
+        HIName.append(Name);
+        LoadInst *HI = Builder.CreateLoad(AI, HIName);
+        IDToValue[Id] = HI;
+      }
+    }
+
+    ++j;
+  }
+  isl_space_free(Space);
+
   Builder.CreateBr(BodyBB);
   Builder.SetInsertPoint(BodyBB);
 
@@ -374,11 +395,12 @@ Value *IslPTXGenerator::getValueOfGPUID(const char *Name) {
 
 void IslPTXGenerator::startGeneration(struct ppcg_kernel *CurKernel,
                                       ValueToValueMapTy &VMap,
+                                      IDToValueTy &IDToValue,
                                       BasicBlock::iterator *KernelBody) {
   Function *SubFunction;
   BasicBlock::iterator PrevInsertPoint = Builder.GetInsertPoint();
   Kernel = CurKernel;
-  createSubfunction(VMap, &SubFunction);
+  createSubfunction(VMap, IDToValue, &SubFunction);
   *KernelBody = Builder.GetInsertPoint();
   Builder.SetInsertPoint(PrevInsertPoint);
 }
