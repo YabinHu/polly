@@ -1,4 +1,4 @@
-/******************** GPUJIT.cpp - GPUJIT Execution Engine ********************/
+/********************* GPUJIT.c - GPUJIT Execution Engine *********************/
 /*                                                                            */
 /*                     The LLVM Compiler Infrastructure                       */
 /*                                                                            */
