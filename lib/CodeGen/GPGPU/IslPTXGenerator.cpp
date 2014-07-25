@@ -686,8 +686,6 @@ Value *IslPTXGenerator::getBaseAddressByName(std::string Name) {
 Value *IslPTXGenerator::getArraySize(struct gpu_array_info *Array,
                                      __isl_take isl_set *Context) {
   Value *ArraySize = ConstantInt::get(getInt64Type(), 1);
-  Value *ElementSize = ConstantInt::get(getInt64Type(), Array->size);
-  ArraySize = Builder.CreateMul(ArraySize, ElementSize);
 
   isl_ast_build *Build = isl_ast_build_from_context(Context);
   if (!gpu_array_is_scalar(Array)) {
@@ -717,6 +715,7 @@ void IslPTXGenerator::setHostIterators(std::map<isl_id *, Value *> &IDToValue) {
 
 void IslPTXGenerator::clearHostIterators() { HostIterators.clear(); }
 
+/* This function is duplicated from ppcg/cuda.c and modified. */
 void IslPTXGenerator::allocateDeviceArguments(Value *CUKernel,
                                               AllocaInst *PtrParamOffset,
                                               ValueToValueMapTy &VMap) {
@@ -1253,7 +1252,6 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   // createCallCleanupGPGPUResources(DData, CUModule, CUContext, CUKernel,
   //                                 CUDevice);
 
-  F->dump();
   // Erase the ptx kernel and device subfunctions and ptx intrinsics from
   // current module.
   eraseUnusedFunctions(F);
