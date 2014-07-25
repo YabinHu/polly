@@ -1025,7 +1025,8 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   struct ppcg_kernel *Kernel = (struct ppcg_kernel *)isl_id_get_user(Id);
   isl_id_free(Id);
   assert(Kernel->tree && "We should have got a kernel isl_ast_node.");
-  print_ast_node_as_c_format(Kernel->tree);
+  if (PTXGen->getOptions()->debug->dump_ast_node)
+    print_ast_node_as_c_format(Kernel->tree);
 
   BasicBlock::iterator KernelBody;
   PTXGen->startGeneration(Kernel, IDToValue, &KernelBody);
@@ -1196,8 +1197,10 @@ public:
     IslNodeBuilder NodeBuilder(Builder, Annotator, this);
 
 #ifdef GPU_CODEGEN
+    struct ppcg_debug_options DebugOptions = {0, 0, 0, 0};
     struct ppcg_options *Options =
         (struct ppcg_options *)malloc(sizeof(struct ppcg_options));
+    Options->debug = &DebugOptions;
     Options->scale_tile_loops = false;
     Options->wrap = false;
     Options->ctx = nullptr;
@@ -1219,7 +1222,8 @@ public:
                            Options);
     NodeBuilder.setPTXGenerator(&PTXGen);
     isl_ast_node *Ast = PTXGen.getOutputAST();
-    print_ast_node_as_c_format(Ast);
+    if (PTXGen.getOptions()->debug->dump_ast_node)
+      print_ast_node_as_c_format(Ast);
 #endif
 
     Builder.SetInsertPoint(StartBlock->getSinglePredecessor()->begin());

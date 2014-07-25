@@ -840,7 +840,7 @@ static void set_used_sizes(struct gpu_gen *gen, const char *type, int id,
 	isl_space *space;
 	isl_map *map;
 
-	if (/*!gen->options->debug->dump_sizes*/true)
+	if (!gen->options->debug->dump_sizes)
 		return;
 
 	space = isl_union_map_get_space(gen->used_sizes);
@@ -5639,11 +5639,11 @@ static void compute_schedule(struct gpu_gen *gen)
 	sc = isl_schedule_constraints_set_coincidence(sc, coincidence);
 	sc = isl_schedule_constraints_set_proximity(sc, proximity);
 
-	//if (gen->options->debug->dump_schedule_constraints)
-	//	isl_schedule_constraints_dump(sc);
+	if (gen->options->debug->dump_schedule_constraints)
+		isl_schedule_constraints_dump(sc);
 	schedule = isl_schedule_constraints_compute_schedule(sc);
-	//if (gen->options->debug->dump_schedule)
-	//	isl_schedule_dump(schedule);
+	if (gen->options->debug->dump_schedule)
+		isl_schedule_dump(schedule);
 
 	sched = select_outer_tilable_band(gen, schedule);
 
@@ -6094,22 +6094,19 @@ int generate_gpu(isl_ctx *ctx, /*const char *input, FILE *out,*/
 	gen.types.n = 0;
 	gen.types.name = NULL;
 
-/*
 	if (options->debug->dump_sizes) {
 		isl_space *space = isl_space_params_alloc(ctx, 0);
 		gen.used_sizes = isl_union_map_empty(space);
 	}
-*/
+
 	// r = ppcg_transform(ctx, input, out, options, &generate_wrap, &gen);
         r = generate(ctx, &gen, scop, options, ext);
 
-/*
 	if (options->debug->dump_sizes) {
 		isl_union_map_dump(gen.used_sizes);
 		isl_union_map_free(gen.used_sizes);
 	}
-*/
-	isl_union_map_free(gen.sizes);
+
 	for (i = 0; i < gen.types.n; ++i)
 		free(gen.types.name[i]);
 	free(gen.types.name);

@@ -54,6 +54,9 @@ public:
   /// @brief Get the generated isl AST for GPGPU.
   __isl_give isl_ast_node *getOutputAST() { return isl_ast_node_copy(Tree); }
 
+  /// @brief Get the options for GPGPU code generation.
+  struct ppcg_options *getOptions() { return Options; }
+
   /// @brief Create PTX kernel function in LLVM IR format.
 
   /// @brief Create a GPGPU parallel loop.
