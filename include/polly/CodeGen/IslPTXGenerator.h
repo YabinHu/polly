@@ -57,8 +57,6 @@ public:
   /// @brief Get the options for GPGPU code generation.
   struct ppcg_options *getOptions() { return Options; }
 
-  /// @brief Create PTX kernel function in LLVM IR format.
-
   /// @brief Create a GPGPU parallel loop.
   ///
   /// @param CurKernel    The current ppcg_kernel.
