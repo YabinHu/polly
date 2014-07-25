@@ -674,6 +674,8 @@ Value *IslPTXGenerator::getBaseAddressByName(std::string Name) {
 Value *IslPTXGenerator::getArraySize(struct gpu_array_info *Array,
                                      __isl_take isl_set *Context) {
   Value *ArraySize = ConstantInt::get(getInt64Type(), 1);
+  Value *ElementSize = ConstantInt::get(getInt64Type(), Array->size);
+  ArraySize = Builder.CreateMul(ArraySize, ElementSize);
 
   isl_ast_build *Build = isl_ast_build_from_context(Context);
   if (!gpu_array_is_scalar(Array)) {
