@@ -784,6 +784,7 @@ void IslPTXGenerator::copyArgumentsToDevice(ValueToValueMapTy &VMap) {
   isl_space_free(Space);
 
   // copy_to_device the parameters corresponding to host iterators.
+  Module *M = getModule();
   int NumHostIters = isl_space_dim(Kernel->space, isl_dim_set);
   for (int i = 0; i < NumHostIters; ++i) {
     Value *HostIter = HostIterators[i];
@@ -792,6 +793,9 @@ void IslPTXGenerator::copyArgumentsToDevice(ValueToValueMapTy &VMap) {
     Value *HData =
         Builder.CreateBitCast(TempHData, getI8PtrType(), "host_iterator");
     VMap[VMap[HostIter]] = HData;
+    int Bytes = M->getDataLayout()->getTypeAllocSize(HostIter->getType());
+    Value *Size = ConstantInt::get(getInt64Type(), Bytes);
+    createCallCopyFromHostToDevice(VMap[HostIter], HData, Size);
   }
 }
 
