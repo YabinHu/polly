@@ -151,12 +151,20 @@ Function *IslPTXGenerator::createSubfunctionDefinition(int &NumMemAccs,
 
   int j = 0;
   for (Function::arg_iterator AI = FN->arg_begin(); AI != FN->arg_end(); ++AI) {
-    if (j < NumMemAccs)
-      AI->setName("ptx.Array");
-    else if (j < NumMemAccs + NumVars)
-      AI->setName("ptx.Var");
-    else
-      AI->setName("ptx.HostIter");
+    if (j < NumMemAccs) {
+      std::string ArrayName = "ptx.Array.";
+      ArrayName.append(Prog->array[j].name);
+      AI->setName(ArrayName);
+    } else if (j < NumMemAccs + NumVars)
+      AI->setName("ptx.Var.");
+    else {
+      int NumIter = j - NumMemAccs - NumVars;
+      std::string IterName = "ptx.HostIter.";
+      const char *HostIter =
+          isl_space_get_dim_name(Kernel->space, isl_dim_set, NumIter);
+      IterName.append(HostIter);
+      AI->setName(IterName);
+    }
 
     j++;
   }
