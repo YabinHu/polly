@@ -793,7 +793,7 @@ extractArraysInfo(polly::Scop *S, std::set<const llvm::Value *> ArrayBases) {
     Arrays[J]->element_type = (char *)TypeName.c_str();
     Arrays[J]->element_is_record = 0;
     Arrays[J]->element_size =
-        ATy->getElementType()->getPrimitiveSizeInBits() / 8;
+        PTy->getElementType()->getPrimitiveSizeInBits() / 8;
     Arrays[J]->live_out = 0;
     Arrays[J]->uniquely_defined = 0;
     Arrays[J]->declared = 0;
