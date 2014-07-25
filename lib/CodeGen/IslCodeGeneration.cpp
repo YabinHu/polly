@@ -1033,7 +1033,6 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
   Builder.SetInsertPoint(KernelBody);
 
-  PTXGen->setHostIterators(IDToValueBackup);
   Function *FN = Builder.GetInsertBlock()->getParent();
   PTXGen->getDeviceArrayBaseAddressMap(GMap, FN);
 
@@ -1050,7 +1049,6 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   Builder.SetInsertPoint(AfterLoop);
   PTXGen->finishGeneration(FN);
 
-  PTXGen->clearHostIterators();
   GMap.clear();
   isl_ast_node_free(Node);
 }

@@ -398,6 +398,7 @@ void IslPTXGenerator::startGeneration(struct ppcg_kernel *CurKernel,
   Function *SubFunction;
   BasicBlock::iterator PrevInsertPoint = Builder.GetInsertPoint();
   Kernel = CurKernel;
+  setHostIterators(IDToValue);
   createSubfunction(IDToValue, &SubFunction);
   *KernelBody = Builder.GetInsertPoint();
   Builder.SetInsertPoint(PrevInsertPoint);
@@ -1242,5 +1243,8 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   // Erase the ptx kernel and device subfunctions and ptx intrinsics from
   // current module.
   eraseUnusedFunctions(F);
+
+  // Clear all the stored host iterator Values.
+  clearHostIterators();
 }
 #endif /* GPU_CODEGEN */

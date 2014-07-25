@@ -88,12 +88,6 @@ public:
   ///        array base address.
   void getDeviceArrayBaseAddressMap(ValueToValueMapTy &VMap, Function *F);
 
-  /// @brief Store the host iterator Value in HostIterators.
-  void setHostIterators(std::map<isl_id *, Value *> &IDToValue);
-
-  /// @brief Clear HostIterators.
-  void clearHostIterators();
-
 private:
   PollyIRBuilder &Builder;
   IslExprBuilder &ExprBuilder;
@@ -146,6 +140,12 @@ private:
   polly::Scop *getPollyScop();
 
   isl_ctx *getIslCtx();
+
+  /// @brief Store the host iterator Value in HostIterators.
+  void setHostIterators(std::map<isl_id *, Value *> &IDToValue);
+
+  /// @brief Clear HostIterators.
+  void clearHostIterators();
 
   /// @brief Polly's GPU data types.
   StructType *ContextTy, *ModuleTy, *KernelTy, *DeviceTy, *DevDataTy, *EventTy;
