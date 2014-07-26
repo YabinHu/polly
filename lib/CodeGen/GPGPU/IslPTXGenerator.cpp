@@ -1194,8 +1194,12 @@ void IslPTXGenerator::finishGeneration(Function *F) {
       Builder.CreateAlloca(getGPUEventPtrType(), 0, "pstop_timer");
   Type *FloatTy = llvm::Type::getFloatTy(getModule()->getContext());
   AllocaInst *PtrElapsedTimes = Builder.CreateAlloca(FloatTy, 0, "ptimer");
+  PtrElapsedTimes->setAlignment(FloatTy->getPrimitiveSizeInBits()/8);
+  Builder.CreateStore(ConstantFP::get(FloatTy, 0.0), PtrElapsedTimes);
   AllocaInst *PtrParamOffset =
       Builder.CreateAlloca(getInt64Type(), 0, "pparamoffset");
+  PtrParamOffset->setAlignment(8/*Int64 Type*/);
+  Builder.CreateStore(ConstantInt::get(getInt64Type(), 0), PtrParamOffset);
 
   // Initialize the GPU device.
   createCallInitDevice(PtrCUContext, PtrCUDevice);
@@ -1214,7 +1218,6 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   createCallGetPTXKernelEntry(PTXEntry, CUModule, PtrCUKernel);
 
   LoadInst *CUKernel = Builder.CreateLoad(PtrCUKernel, "cukernel");
-  Builder.CreateStore(ConstantInt::get(getInt64Type(), 0), PtrParamOffset);
 
   // Allocate device memory space for copy-in arrays.
   polly::ValueToValueMap VMap;
