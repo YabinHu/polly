@@ -52,27 +52,27 @@
  *   int *HostData;
  *   PollyGPUEvent *Start;
  *   PollyGPUEvent *Stop;
- *   float *ElapsedTime;
+ *   float ElapsedTime = 0.0;
  *   int MemSize;
  *   int BlockWidth = 16;
  *   int BlockHeight = 16;
  *   int BlockDepth = 1;
  *   int GridWidth = 8;
  *   int GridHeight = 8;
- *   void *ParamOffset;
+ *   int ParamOffset = 0;
  *
  *   MemSize = 256*64*sizeof(int);
  *   polly_initDevice(&Context, &Device);
  *   polly_getPTXModule(KernelString, &Module);
  *   polly_getPTXKernelEntry(Entry, Module, &Kernel);
  *   polly_allocateMemoryForHostAndDevice(&HostData, &DevData, MemSize);
- *   polly_setKernelParameters(Kernel, DevData, ParamOffset);
+ *   polly_setKernelParameters(Kernel, DevData, &ParamOffset);
  *   polly_setBlockShape(Kernel, BlockWidth, BlockHeight, BlockDepth);
  *   polly_startTimerByCudaEvent(&Start, &Stop);
  *   polly_launchKernel(Kernel, GridWidth, GridHeight);
  *   polly_copyFromDeviceToHost(HostData, DevData, MemSize);
- *   polly_stopTimerByCudaEvent(Start, Stop, ElapsedTime);
- *   polly_cleanupGPGPUResources(HostData, DevData, Module, Context, Kernel);
+ *   polly_stopTimerByCudaEvent(Start, Stop, &ElapsedTime);
+ *   polly_cleanupGPGPUResources(DevData, Module, Context, Kernel, Device);
  * }
  *
  */
