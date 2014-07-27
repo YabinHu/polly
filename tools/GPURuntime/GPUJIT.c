@@ -363,9 +363,22 @@ void polly_stopTimerByCudaEvent(PollyGPUEvent *Start, PollyGPUEvent *Stop,
   free(Stop);
 }
 
+void polly_initDevDataArray(PollyGPUDevicePtr ***DevDataArray) {
+  // We assume total number of arrays and parameters on device is less than 10.
+  *DevDataArray = malloc(10 * sizeof(PollyGPUDevicePtr *));
+  if (*DevDataArray == 0) {
+    fprintf(stdout, "Allocate memory for GPU device data array failed.\n");
+    exit(-1);
+  }
+}
+
 void polly_allocateMemoryForHostAndDevice(void **HostData,
+                                          PollyGPUDevicePtr **DevDataArray,
                                           PollyGPUDevicePtr **DevData,
-                                          int MemSize) {
+                                          int MemSize, int *NumDevData) {
+  assert((*NumDevData) < 10 &&
+         "Times of allocate memory on device should be less thean 10.");
+
   if ((*HostData = (int *)malloc(MemSize)) == 0) {
     fprintf(stdout, "Could not allocate host memory.\n");
     exit(-1);
@@ -377,10 +390,17 @@ void polly_allocateMemoryForHostAndDevice(void **HostData,
     exit(-1);
   }
   CuMemAllocFcnPtr(&((*DevData)->Cuda), MemSize);
+
+  DevDataArray[(*NumDevData)++] = *DevData;
 }
 
-void polly_allocateMemoryForDevice(PollyGPUDevicePtr **DevData, int MemSize) {
+void polly_allocateMemoryForDevice(PollyGPUDevicePtr **DevDataArray,
+                                   PollyGPUDevicePtr **DevData, int MemSize,
+                                   int *NumDevData) {
   CUresult Res;
+
+  assert((*NumDevData) < 10 &&
+         "Times of allocate memory on device should be less thean 10.");
 
   *DevData = malloc(sizeof(PollyGPUDevicePtr));
   if (*DevData == 0) {
@@ -394,6 +414,8 @@ void polly_allocateMemoryForDevice(PollyGPUDevicePtr **DevData, int MemSize) {
     fprintf(stdout, "The Error Message is %s.\n", getCudaDrvErrorString(Res));
     exit(-1);
   }
+
+  DevDataArray[(*NumDevData)++] = *DevData;
 }
 
 void polly_copyFromHostToDevice(PollyGPUDevicePtr *DevData, void *HostData,
@@ -447,18 +469,27 @@ void polly_launchKernel(PollyGPUFunction *Kernel, int GridWidth,
   fprintf(stdout, "CUDA kernel launched.\n");
 }
 
-void polly_cleanupGPGPUResources(PollyGPUDevicePtr *DevData,
-                                 PollyGPUModule *Module,
+void polly_freeDeviceMemory(PollyGPUDevicePtr **DevDataArray, int NumDevData) {
+  int i;
+
+  for(i = 0; i < NumDevData; ++i) {
+    PollyGPUDevicePtr *DevData = DevDataArray[i];
+    if (DevData->Cuda) {
+      CuMemFreeFcnPtr(DevData->Cuda);
+      DevData->Cuda = 0;
+      free(DevData);
+      DevData = 0;
+    }
+  }
+
+  free(DevDataArray);
+  DevDataArray = NULL;
+}
+
+void polly_cleanupGPGPUResources(PollyGPUModule *Module,
                                  PollyGPUContext *Context,
                                  PollyGPUFunction *Kernel,
                                  PollyGPUDevice *Device) {
-  if (DevData->Cuda) {
-    CuMemFreeFcnPtr(DevData->Cuda);
-    DevData->Cuda = 0;
-    free(DevData);
-    DevData = 0;
-  }
-
   if (Module->Cuda) {
     CuModuleUnloadFcnPtr(Module->Cuda);
     Module->Cuda = 0;
