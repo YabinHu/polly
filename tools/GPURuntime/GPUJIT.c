@@ -14,6 +14,7 @@
 #include "GPUJIT.h"
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <assert.h>
 #include <dlfcn.h>
 #include <stdio.h>
 
