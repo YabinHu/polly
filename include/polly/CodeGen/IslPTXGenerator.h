@@ -55,7 +55,9 @@ public:
   __isl_give isl_ast_node *getOutputAST() { return isl_ast_node_copy(Tree); }
 
   /// @brief Get the options for GPGPU code generation.
-  struct ppcg_options *getOptions() { return Options; }
+  struct ppcg_options *getOptions() {
+    return Options;
+  }
 
   /// @brief Create a GPGPU parallel loop.
   ///
@@ -85,6 +87,12 @@ public:
   /// @brief Get the mapping of device array base address to original
   ///        array base address.
   void getDeviceArrayBaseAddressMap(ValueToValueMapTy &VMap, Function *F);
+
+  /// @brief Store the host iterator Value in HostIterators.
+  void setHostIterators(std::map<isl_id *, Value *> &IDToValue);
+
+  /// @brief Clear HostIterators.
+  void clearHostIterators();
 
 private:
   PollyIRBuilder &Builder;
@@ -120,6 +128,9 @@ private:
 
   /// @brief All the array base addresses in this Scop.
   SetVector<Value *> BaseAddresses;
+
+  /// @brief All the host iterators that copy into the kernel.
+  SetVector<Value *> HostIterators;
 
   /// @brief Build the internal scop.
   void buildScop();
@@ -191,6 +202,9 @@ private:
   void allocateDeviceArrays(Value *CUKernel, AllocaInst *PtrParamOffset,
                             ValueToValueMapTy &VMap);
   void copyArraysToDevice(ValueToValueMapTy &VMap);
+  void allocateDeviceArguments(Value *CUKernel, AllocaInst *PtrParamOffset,
+                               ValueToValueMapTy &VMap);
+  void copyArgumentsToDevice(ValueToValueMapTy &VMap);
   void copyArraysFromDevice(ValueToValueMapTy VMap);
 
   /// @brief Create the CUDA subfunction.

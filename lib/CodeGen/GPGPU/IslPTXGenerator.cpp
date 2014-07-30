@@ -695,6 +695,51 @@ Value *IslPTXGenerator::getArraySize(struct gpu_array_info *Array,
   return ArraySize;
 }
 
+void IslPTXGenerator::setHostIterators(std::map<isl_id *, Value *> &IDToValue) {
+  int NumHostIters = isl_space_dim(Kernel->space, isl_dim_set);
+  for (int i = 0; i < NumHostIters; ++i) {
+    isl_id *Id = isl_space_get_dim_id(Kernel->space, isl_dim_set, i);
+    HostIterators.insert(IDToValue[Id]);
+    isl_id_free(Id);
+  }
+}
+
+void IslPTXGenerator::clearHostIterators() { HostIterators.clear(); }
+
+/* This function is duplicated from ppcg/cuda.c and modified. */
+void IslPTXGenerator::allocateDeviceArguments(Value *CUKernel,
+                                              AllocaInst *PtrParamOffset,
+                                              ValueToValueMapTy &VMap) {
+  // TODO allocate and copy_to_device the kernel parameters.
+  isl_space *Space = isl_union_set_get_space(Kernel->arrays);
+  int NumVars = isl_space_dim(Space, isl_dim_param);
+  isl_space_free(Space);
+
+  // Allocate and copy_to_device the parameters corresponding to host
+  // iterators.
+  int NumHostIters = isl_space_dim(Kernel->space, isl_dim_set);
+  for (int i = 0; i < NumHostIters; ++i) {
+    Value *HostIter = HostIterators[i];
+    std::string IterName = HostIter->getName();
+    std::string PtrDevName("pdevice_");
+    PtrDevName.append(IterName);
+    AllocaInst *PtrDevData =
+        Builder.CreateAlloca(getPtrGPUDevicePtrType(), 0, PtrDevName);
+
+    // allocate memory for input host iterator on the device.
+    Module *M = getModule();
+    int Bytes = M->getDataLayout()->getTypeAllocSize(HostIter->getType());
+    Value *Size = ConstantInt::get(getInt64Type(), Bytes);
+    createCallAllocateMemoryForDevice(PtrDevData, Size);
+
+    std::string DevName("device_");
+    DevName.append(IterName);
+    LoadInst *DData = Builder.CreateLoad(PtrDevData, DevName);
+    createCallSetKernelParameters(CUKernel, DData, PtrParamOffset);
+    VMap[HostIter] = DData;
+  }
+}
+
 /* This function is duplicated from ppcg/cuda.c and modified. */
 void IslPTXGenerator::allocateDeviceArrays(Value *CUKernel,
                                            AllocaInst *PtrParamOffset,
@@ -720,6 +765,24 @@ void IslPTXGenerator::allocateDeviceArrays(Value *CUKernel,
     createCallSetKernelParameters(CUKernel, DData, PtrParamOffset);
     Value *BaseAddr = getBaseAddressByName(ArrayName);
     VMap[BaseAddr] = DData;
+  }
+}
+
+void IslPTXGenerator::copyArgumentsToDevice(ValueToValueMapTy &VMap) {
+  // TODO copy_to_device the kernel parameters.
+  isl_space *Space = isl_union_set_get_space(Kernel->arrays);
+  int NumVars = isl_space_dim(Space, isl_dim_param);
+  isl_space_free(Space);
+
+  // copy_to_device the parameters corresponding to host iterators.
+  int NumHostIters = isl_space_dim(Kernel->space, isl_dim_set);
+  for (int i = 0; i < NumHostIters; ++i) {
+    Value *HostIter = HostIterators[i];
+    AllocaInst *TempHData = Builder.CreateAlloca(HostIter->getType(), 0, "");
+    Builder.CreateStore(HostIter, TempHData);
+    Value *HData =
+        Builder.CreateBitCast(TempHData, getI8PtrType(), "host_iterator");
+    VMap[VMap[HostIter]] = HData;
   }
 }
 
@@ -1155,7 +1218,7 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   polly::ValueToValueMap VMap;
   allocateDeviceArrays(CUKernel, PtrParamOffset, VMap);
 
-  // Copy the results back from the GPU to the host.
+  // Copy the data from the host to the GPU.
   copyArraysToDevice(VMap);
 
   // Set kernel block shape.
