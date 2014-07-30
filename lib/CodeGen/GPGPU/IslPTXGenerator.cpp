@@ -1158,12 +1158,12 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   // Copy the results back from the GPU to the host.
   copyArraysToDevice(VMap);
 
-  // Create the start and end timer and record the start time.
-  createCallStartTimerByCudaEvent(PtrCUStartEvent, PtrCUStopEvent);
-
   // Set kernel block shape.
   createCallSetBlockShape(CUKernel, getCUDABlockDimX(), getCUDABlockDimY(),
                           getCUDABlockDimZ());
+
+  // Create the start and end timer and record the start time.
+  createCallStartTimerByCudaEvent(PtrCUStartEvent, PtrCUStopEvent);
 
   // Launch the GPU kernel.
   setLaunchingParameters();
