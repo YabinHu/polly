@@ -7,6 +7,7 @@ struct ppcg_debug_options {
 	int dump_schedule_constraints;
 	int dump_schedule;
 	int dump_sizes;
+	int dump_ast_node;
 };
 
 struct ppcg_options {
