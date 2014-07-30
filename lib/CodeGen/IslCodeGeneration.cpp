@@ -28,6 +28,7 @@
 #include "polly/CodeGen/Utils.h"
 #include "polly/Dependences.h"
 #include "polly/LinkAllPasses.h"
+#include "polly/Options.h"
 #include "polly/ScopInfo.h"
 #include "polly/Support/GICHelper.h"
 #include "polly/Support/ScopHelper.h"
@@ -55,6 +56,20 @@ using namespace polly;
 using namespace llvm;
 
 #define DEBUG_TYPE "polly-codegen-isl"
+
+#ifdef GPU_CODEGEN
+namespace polly {
+static cl::opt<bool>
+    GPGPU("enable-polly-gpgpu-isl", cl::desc("Generate GPU parallel code"),
+          cl::Hidden, cl::value_desc("GPGPU code generation enabled if true"),
+          cl::init(false), cl::ZeroOrMore, cl::cat(PollyCategory));
+
+static cl::opt<std::string>
+    GPUTriple("polly-gpgpu-triple-isl",
+              cl::desc("Target triple for GPU code generation"), cl::Hidden,
+              cl::init("nvptx64-unknown-unknown"), cl::cat(PollyCategory));
+} /* end namespace polly */
+#endif /* GPU_CODEGEN */
 
 /// @brief Insert function calls that print certain LLVM values at run time.
 ///
