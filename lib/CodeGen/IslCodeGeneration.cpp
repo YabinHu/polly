@@ -1007,8 +1007,7 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   if (PTXGen->getOptions()->debug->dump_ast_node)
     print_ast_node_as_c_format(Kernel->tree);
 
-  PTXGen->setGPUKernel(Kernel);
-  PTXGen->startGeneration(VMap, &KernelBody);
+  PTXGen->startGeneration(Kernel, VMap, &KernelBody);
   BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
   Builder.SetInsertPoint(KernelBody);
 
@@ -1020,7 +1019,6 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   // PTXGen->setLaunchingParameters(Kernel);
   PTXGen->finishGeneration(FN);
 
-  PTXGen->setGPUKernel(nullptr);
   isl_ast_node_free(Node);
 }
 #endif

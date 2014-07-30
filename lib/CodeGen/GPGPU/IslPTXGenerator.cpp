@@ -185,13 +185,10 @@ void IslPTXGenerator::createSubfunction(ValueToValueMapTy &VMap,
                                         Function **Subfunction) {
 
   int NumMemAccs, NumVars;
-  if (!Kernel) {
-    NumMemAccs = 0;
-    NumVars = 0;
-  } else {
-    NumMemAccs = Kernel->n_array;
-    NumVars = Kernel->n_var;
-  }
+  assert(Kernel && "Kernel should have been set correctly.");
+  NumMemAccs = Kernel->n_array;
+  NumVars = Kernel->n_var;
+
   Function *F = createSubfunctionDefinition(NumMemAccs, NumVars);
 
   Module *M = getModule();
@@ -338,10 +335,12 @@ Value *IslPTXGenerator::getValueOfGPUID(const char *Name) {
   return nullptr;
 }
 
-void IslPTXGenerator::startGeneration(ValueToValueMapTy &VMap,
+void IslPTXGenerator::startGeneration(struct ppcg_kernel *CurKernel,
+                                      ValueToValueMapTy &VMap,
                                       BasicBlock::iterator *KernelBody) {
   Function *SubFunction;
   BasicBlock::iterator PrevInsertPoint = Builder.GetInsertPoint();
+  Kernel = CurKernel;
   createSubfunction(VMap, &SubFunction);
   *KernelBody = Builder.GetInsertPoint();
   Builder.SetInsertPoint(PrevInsertPoint);
