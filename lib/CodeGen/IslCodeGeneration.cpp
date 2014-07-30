@@ -795,6 +795,14 @@ void IslNodeBuilder::createSubstitutionsVector(
   isl_ast_expr_free(Expr);
 }
 
+static void print_ast_node_as_c_format(__isl_keep isl_ast_node *Ast) {
+  isl_printer *p = isl_printer_to_str(isl_ast_node_get_ctx(Ast));
+  p = isl_printer_set_output_format(p, ISL_FORMAT_C);
+  p = isl_printer_print_ast_node(p, Ast);
+  errs() << isl_printer_get_str(p) << "\n";
+  isl_printer_free(p);
+}
+
 void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
   ValueMapT VMap;
   LoopToScevMapT LTS;
