@@ -1163,7 +1163,7 @@ ppcg_scop_from_polly_scop(Scop *scop, struct ppcg_options *options)
 
 	if (!ps->context || !ps->domain || !ps->call || !ps->reads ||
 	    !ps->may_writes || !ps->must_writes || !ps->tagged_must_kills ||
-	    !ps->schedule || !ps->independence)
+	    !ps->schedule /*|| !ps->independence*/)
 		return (struct ppcg_scop *)ppcg_scop_free(ps);
 
 	return ps;
