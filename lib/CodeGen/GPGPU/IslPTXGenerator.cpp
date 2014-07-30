@@ -569,8 +569,28 @@ void IslPTXGenerator::createCallGetPTXKernelEntry(Value *Entry, Value *Module,
   Builder.CreateCall3(F, Entry, Module, Kernel);
 }
 
-void IslPTXGenerator::createCallAllocateMemoryForDevice(Value *DeviceData,
-                                                        Value *Size) {
+void IslPTXGenerator::createCallInitDevDataArray(Value *DevDataArray) {
+  const char *Name = "polly_initDevDataArray";
+  Module *M = getModule();
+  Function *F = M->getFunction(Name);
+
+  // If F is not available, declare it.
+  if (!F) {
+    GlobalValue::LinkageTypes Linkage = Function::ExternalLinkage;
+    std::vector<Type *> Args;
+    PointerType *PTy = PointerType::getUnqual(getPtrGPUDevicePtrType());
+    Args.push_back(PointerType::getUnqual(PTy));
+    FunctionType *Ty = FunctionType::get(Builder.getVoidTy(), Args, false);
+    F = Function::Create(Ty, Linkage, Name, M);
+  }
+
+  Builder.CreateCall(F, DevDataArray);
+}
+
+void IslPTXGenerator::createCallAllocateMemoryForDevice(Value *DevDataArray,
+                                                        Value *DevData,
+                                                        Value *Size,
+                                                        Value *NumDevData) {
   const char *Name = "polly_allocateMemoryForDevice";
   Module *M = getModule();
   Function *F = M->getFunction(Name);
@@ -580,12 +600,14 @@ void IslPTXGenerator::createCallAllocateMemoryForDevice(Value *DeviceData,
     GlobalValue::LinkageTypes Linkage = Function::ExternalLinkage;
     std::vector<Type *> Args;
     Args.push_back(PointerType::getUnqual(getPtrGPUDevicePtrType()));
+    Args.push_back(PointerType::getUnqual(getPtrGPUDevicePtrType()));
     Args.push_back(getInt64Type());
+    Args.push_back(PointerType::getUnqual(getInt64Type()));
     FunctionType *Ty = FunctionType::get(Builder.getVoidTy(), Args, false);
     F = Function::Create(Ty, Linkage, Name, M);
   }
 
-  Builder.CreateCall2(F, DeviceData, Size);
+  Builder.CreateCall4(F, DevDataArray, DevData, Size, NumDevData);
 }
 
 void IslPTXGenerator::createCallCopyFromHostToDevice(Value *DeviceData,
@@ -719,6 +741,8 @@ void IslPTXGenerator::clearHostIterators() { HostIterators.clear(); }
 
 /* This function is duplicated from ppcg/cuda.c and modified. */
 void IslPTXGenerator::allocateDeviceArguments(Value *CUKernel,
+                                              LoadInst *DevDataArray,
+                                              AllocaInst *PtrNumDevData,
                                               AllocaInst *PtrParamOffset,
                                               ValueToValueMapTy &VMap) {
   // TODO allocate and copy_to_device the kernel parameters.
@@ -741,7 +765,8 @@ void IslPTXGenerator::allocateDeviceArguments(Value *CUKernel,
     Module *M = getModule();
     int Bytes = M->getDataLayout()->getTypeAllocSize(HostIter->getType());
     Value *Size = ConstantInt::get(getInt64Type(), Bytes);
-    createCallAllocateMemoryForDevice(PtrDevData, Size);
+    createCallAllocateMemoryForDevice(DevDataArray, PtrDevData, Size,
+                                      PtrNumDevData);
 
     std::string DevName("device_");
     DevName.append(IterName);
@@ -753,6 +778,8 @@ void IslPTXGenerator::allocateDeviceArguments(Value *CUKernel,
 
 /* This function is duplicated from ppcg/cuda.c and modified. */
 void IslPTXGenerator::allocateDeviceArrays(Value *CUKernel,
+                                           LoadInst *DevDataArray,
+                                           AllocaInst *PtrNumDevData,
                                            AllocaInst *PtrParamOffset,
                                            ValueToValueMapTy &VMap) {
   for (int i = 0; i < Prog->n_array; ++i) {
@@ -768,7 +795,8 @@ void IslPTXGenerator::allocateDeviceArrays(Value *CUKernel,
     // allocate memory for input array on the device.
     Value *ArraySize =
         getArraySize(&Prog->array[i], isl_set_copy(Prog->context));
-    createCallAllocateMemoryForDevice(PtrDevData, ArraySize);
+    createCallAllocateMemoryForDevice(DevDataArray, PtrDevData, ArraySize,
+                                      PtrNumDevData);
 
     std::string DevName("device_");
     DevName.append(ArrayName);
@@ -940,8 +968,26 @@ void IslPTXGenerator::createCallStopTimerByCudaEvent(Value *StartEvent,
   Builder.CreateCall3(F, StartEvent, StopEvent, Timer);
 }
 
-void IslPTXGenerator::createCallCleanupGPGPUResources(Value *DeviceData,
-                                                      Value *Module,
+void IslPTXGenerator::createCallFreeDeviceMemory(Value *DevDataArray,
+                                                 Value *NumDevData) {
+  const char *Name = "polly_freeDeviceMemory";
+  Module *M = getModule();
+  Function *F = M->getFunction(Name);
+
+  // If F is not available, declare it.
+  if (!F) {
+    GlobalValue::LinkageTypes Linkage = Function::ExternalLinkage;
+    std::vector<Type *> Args;
+    Args.push_back(PointerType::getUnqual(getPtrGPUDevicePtrType()));
+    Args.push_back(getInt64Type());
+    FunctionType *Ty = FunctionType::get(Builder.getVoidTy(), Args, false);
+    F = Function::Create(Ty, Linkage, Name, M);
+  }
+
+  Builder.CreateCall2(F, DevDataArray, NumDevData);
+}
+
+void IslPTXGenerator::createCallCleanupGPGPUResources(Value *Module,
                                                       Value *Context,
                                                       Value *Kernel,
                                                       Value *Device) {
@@ -953,7 +999,6 @@ void IslPTXGenerator::createCallCleanupGPGPUResources(Value *DeviceData,
   if (!F) {
     GlobalValue::LinkageTypes Linkage = Function::ExternalLinkage;
     std::vector<Type *> Args;
-    Args.push_back(getPtrGPUDevicePtrType());
     Args.push_back(getGPUModulePtrType());
     Args.push_back(getGPUContextPtrType());
     Args.push_back(getGPUFunctionPtrType());
@@ -962,7 +1007,7 @@ void IslPTXGenerator::createCallCleanupGPGPUResources(Value *DeviceData,
     F = Function::Create(Ty, Linkage, Name, M);
   }
 
-  Builder.CreateCall5(F, DeviceData, Module, Context, Kernel, Device);
+  Builder.CreateCall4(F, Module, Context, Kernel, Device);
 }
 
 void IslPTXGenerator::createCallBarrierIntrinsic() {
@@ -1206,6 +1251,10 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   AllocaInst *PtrElapsedTimes = Builder.CreateAlloca(FloatTy, 0, "ptimer");
   PtrElapsedTimes->setAlignment(FloatTy->getPrimitiveSizeInBits()/8);
   Builder.CreateStore(ConstantFP::get(FloatTy, 0.0), PtrElapsedTimes);
+  AllocaInst *PtrNumDevData =
+      Builder.CreateAlloca(getInt64Type(), 0, "pndevdata");
+  PtrNumDevData->setAlignment(8/*Int64 Type*/);
+  Builder.CreateStore(ConstantInt::get(getInt64Type(), 0), PtrNumDevData);
   AllocaInst *PtrParamOffset =
       Builder.CreateAlloca(getInt64Type(), 0, "pparamoffset");
   PtrParamOffset->setAlignment(8/*Int64 Type*/);
@@ -1229,12 +1278,26 @@ void IslPTXGenerator::finishGeneration(Function *F) {
 
   LoadInst *CUKernel = Builder.CreateLoad(PtrCUKernel, "cukernel");
 
+  // Allocate device data array.
+  PointerType *Ty = PointerType::getUnqual(getPtrGPUDevicePtrType());
+  AllocaInst *PtrDevDataArray = Builder.CreateAlloca(Ty, 0, "pdevdata_array");
+  createCallInitDevDataArray(PtrDevDataArray);
+
   // Allocate device memory space for copy-in arrays.
   polly::ValueToValueMap VMap;
-  allocateDeviceArrays(CUKernel, PtrParamOffset, VMap);
+  LoadInst *DevDataArray = Builder.CreateLoad(PtrDevDataArray, "devdata_array");
+  allocateDeviceArrays(CUKernel, DevDataArray, PtrNumDevData, PtrParamOffset,
+                       VMap);
 
   // Copy the data from the host to the GPU.
   copyArraysToDevice(VMap);
+
+  // Allocate device memory space for input arguments.
+  allocateDeviceArguments(CUKernel, DevDataArray, PtrNumDevData, PtrParamOffset,
+                          VMap);
+
+  // Copy input argument data from the host to the GPU.
+  copyArgumentsToDevice(VMap);
 
   // Set kernel block shape.
   createCallSetBlockShape(CUKernel, getCUDABlockDimX(), getCUDABlockDimY(),
@@ -1255,11 +1318,14 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   LoadInst *CUStopEvent = Builder.CreateLoad(PtrCUStopEvent, "stop_timer");
   createCallStopTimerByCudaEvent(CUStartEvent, CUStopEvent, PtrElapsedTimes);
 
+  // Free device memory.
+  LoadInst *NumDevData = Builder.CreateLoad(PtrNumDevData, "ndevdata");
+  createCallFreeDeviceMemory(DevDataArray, NumDevData);
+
   // Cleanup all the resources used.
   LoadInst *CUContext = Builder.CreateLoad(PtrCUContext, "cucontext");
   LoadInst *CUDevice = Builder.CreateLoad(PtrCUDevice, "cudevice");
-  // createCallCleanupGPGPUResources(DData, CUModule, CUContext, CUKernel,
-  //                                 CUDevice);
+  createCallCleanupGPGPUResources(CUModule, CUContext, CUKernel, CUDevice);
 
   // Erase the ptx kernel and device subfunctions and ptx intrinsics from
   // current module.
