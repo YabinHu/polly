@@ -1008,11 +1008,11 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
   isl_ast_expr *Expr = isl_ast_node_user_get_expr(User);
   isl_ast_expr *StmtExpr = isl_ast_expr_get_op_arg(Expr, 0);
   Id = isl_ast_expr_get_id(StmtExpr);
+  isl_ast_expr_free(StmtExpr);
 #ifdef GPU_CODEGEN
   if (GPGPU) {
     const char *Str = isl_id_get_name(Id);
     isl_id_free(Id);
-    isl_ast_expr_free(StmtExpr);
     isl_ast_expr_free(Expr);
 
     if (!strcmp(Str, "kernel")) {
