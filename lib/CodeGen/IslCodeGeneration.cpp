@@ -51,6 +51,7 @@
 #include "isl/aff.h"
 
 #include <map>
+#include "./GPGPU/ppcg_options.h"
 
 using namespace polly;
 using namespace llvm;
@@ -1045,13 +1046,51 @@ public:
     simplifyRegion(&S, this);
 
     BasicBlock *StartBlock = executeScopConditionally(S, this);
+#ifndef GPU_CODEGEN
     isl_ast_node *Ast = AstInfo.getAst();
+#else
+    isl_ast_node *Ast = nullptr;
+    if (!GPGPU)
+      Ast = AstInfo.getAst();
+#endif
     LoopAnnotator Annotator;
     PollyIRBuilder Builder(StartBlock->getContext(), llvm::ConstantFolder(),
                            polly::IRInserter(Annotator));
     Builder.SetInsertPoint(StartBlock->begin());
-
     IslNodeBuilder NodeBuilder(Builder, Annotator, this);
+
+#ifdef GPU_CODEGEN
+    IslPTXGenerator *PTXGen = nullptr;
+    struct ppcg_options *Options = nullptr;
+    if (GPGPU) {
+      struct ppcg_debug_options DebugOptions = {0, 0, 0, 0};
+      Options = (struct ppcg_options *)malloc(sizeof(struct ppcg_options));
+      Options->debug = &DebugOptions;
+      Options->scale_tile_loops = false;
+      Options->wrap = false;
+      Options->ctx = nullptr;
+      Options->sizes = nullptr;
+      Options->tile_size = 32;
+      Options->use_private_memory = true;
+      Options->use_shared_memory = true;
+      Options->max_shared_memory = 8192;
+      Options->target = 0; /* ptx codegen */
+      Options->openmp = 0;
+      Options->linearize_device_arrays = false;
+      Options->live_range_reordering = false;
+      Options->opencl_compiler_options = nullptr;
+      Options->opencl_use_gpu = 0;
+      errs() << "hello ptx code generator.\n";
+
+      PTXGen = new IslPTXGenerator(Builder, NodeBuilder.getExprBuilder(), this,
+                                   GPUTriple, Options);
+      Ast = PTXGen->getOutputAST();
+      if (PTXGen->getOptions()->debug->dump_ast_node)
+        print_ast_node_as_c_format(Ast);
+    }
+
+    NodeBuilder.setPTXGenerator(PTXGen);
+#endif
 
     Builder.SetInsertPoint(StartBlock->getSinglePredecessor()->begin());
     NodeBuilder.addParameters(S.getContext());
@@ -1067,6 +1106,14 @@ public:
     Builder.SetInsertPoint(StartBlock->begin());
 
     NodeBuilder.create(Ast);
+
+#ifdef GPU_CODEGEN
+    if (PTXGen)
+      delete PTXGen;
+    if (Options)
+      free(Options);
+#endif
+
     return true;
   }
 
