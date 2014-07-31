@@ -1041,12 +1041,12 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
 }
 
 static void collect_id_from_ast_expr(__isl_keep isl_ast_expr *Expr,
-                                     SmallVector<isl_id *, 5> &IdList) {
+                                     isl_id **IdList, unsigned &Pos) {
   if (isl_ast_expr_get_type(Expr) == isl_ast_expr_op) {
     int n = isl_ast_expr_get_op_n_arg(Expr);
     for (int i = 0; i < n; i++) {
       isl_ast_expr *IdExpr = isl_ast_expr_get_op_arg(Expr, i);
-      collect_id_from_ast_expr(IdExpr, IdList);
+      collect_id_from_ast_expr(IdExpr, IdList, Pos);
       isl_ast_expr_free(IdExpr);
     }
   }
@@ -1055,22 +1055,22 @@ static void collect_id_from_ast_expr(__isl_keep isl_ast_expr *Expr,
     isl_id *Id = isl_ast_expr_get_id(Expr);
     const char *Name = isl_id_get_name(Id);
     if (!strcmp(Name, "b0") || !strcmp(Name, "b1") || !strcmp(Name, "t0") ||
-        !strcmp(Name, "t1") || !strcmp(Name, "t2"))
-      IdList.push_back(Id);
-    else
+        !strcmp(Name, "t1") || !strcmp(Name, "t2")) {
+      IdList[Pos] = Id;
+      ++Pos;
+    } else
       isl_id_free(Id);
   }
 }
 
-static void collect_id_list_from_ast_expr(__isl_take isl_ast_expr *Expr,
-                                          SmallVector<isl_id *, 5> &IdList) {
+static void collect_id_list_from_ast_expr(__isl_keep isl_ast_expr *Expr,
+                                          isl_id **IdList, unsigned &Pos) {
   int n = isl_ast_expr_get_op_n_arg(Expr);
   for (int i = 1; i < n; i++) {
     isl_ast_expr *IdExpr = isl_ast_expr_get_op_arg(Expr, i);
-    collect_id_from_ast_expr(IdExpr, IdList);
+    collect_id_from_ast_expr(IdExpr, IdList, Pos);
     isl_ast_expr_free(IdExpr);
   }
-  isl_ast_expr_free(Expr);
 }
 #endif
 
@@ -1085,7 +1085,8 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
   Id = isl_ast_expr_get_id(StmtExpr);
   isl_ast_expr_free(StmtExpr);
 #ifdef GPU_CODEGEN
-  SmallVector<isl_id *, 5> IdList;
+  isl_id **IdList = (isl_id **)malloc(5 * sizeof(isl_id *));
+  unsigned Pos = 0;
   if (GPGPU) {
     const char *Str = isl_id_get_name(Id);
     // We assume no other IDs called name "kernel".
@@ -1101,11 +1102,14 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
         (struct ppcg_kernel_stmt *)isl_id_get_user(Anno);
     isl_id_free(Anno);
 
+    for (int i = 0; i < 5; ++i)
+      IdList[i] = nullptr;
     switch (KernelStmt->type) {
     case ppcg_kernel_domain: {
       Stmt = KernelStmt->u.d.stmt->stmt;
-      collect_id_list_from_ast_expr(Expr, IdList);
-      for (isl_id *GPUId : IdList) {
+      collect_id_list_from_ast_expr(Expr, IdList, Pos);
+      for (int i = 0; i < Pos; i++) {
+        isl_id *GPUId = IdList[i];
         const char *Name = isl_id_get_name(GPUId);
         Value *IDValue = PTXGen->getValueOfGPUID(Name);
         IDToValue[GPUId] = IDValue;
@@ -1135,12 +1139,13 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
 
 #ifdef GPU_CODEGEN
   if (GPGPU) {
-    for (isl_id *GPUId : IdList) {
+    for (int i = 0; i < Pos; i++) {
+      isl_id *GPUId = IdList[i];
       IDToValue.erase(GPUId);
       isl_id_free(GPUId);
     }
-    IdList.clear();
   }
+  free(IdList);
 #endif
 
   isl_ast_node_free(User);
