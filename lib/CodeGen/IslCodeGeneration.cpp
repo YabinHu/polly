@@ -1024,8 +1024,14 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
   Builder.SetInsertPoint(KernelBody);
 
-  create(isl_ast_node_copy(Kernel->tree));
   Function *FN = Builder.GetInsertBlock()->getParent();
+  SetVector<Value *> Addrs;
+  Scop *S = P->getAnalysis<ScopInfo>().getScop();
+  for (ScopStmt *Stmt : *S)
+    for (MemoryAccess *Acc : *Stmt)
+      Addrs.insert(const_cast<Value *>(Acc->getBaseAddr()));
+  PTXGen->getDeviceArrayBaseAddressMap(GMap, FN, Addrs);
+  create(isl_ast_node_copy(Kernel->tree));
 
   // Set back the insert point to host end code.
   Builder.SetInsertPoint(AfterLoop);
@@ -1039,6 +1045,7 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   PTXGen->setLaunchingParameters(GridDimX, GridDimY);
   PTXGen->finishGeneration(FN);
 
+  GMap.clear();
   isl_ast_node_free(Node);
 }
 
