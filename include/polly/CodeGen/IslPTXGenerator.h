@@ -82,9 +82,9 @@ public:
   /// @param Bytes        Output array size in bytes.
   void setOutputBytes(unsigned Bytes) { OutputBytes = Bytes; }
 
-  /// @brief Get struct ppcg_kernel *Kernel.
+  /// @brief Set current struct ppcg_kernel *Kernel.
   ///
-  struct ppcg_kernel *getGPUKernel() { return Kernel; }
+  void setGPUKernel(struct ppcg_kernel *Ker) { Kernel = Ker; }
 
   /// @brief Set the parameters for launching PTX kernel.
   ///
