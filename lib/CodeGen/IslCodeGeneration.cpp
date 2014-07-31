@@ -33,6 +33,8 @@
 #include "polly/Support/GICHelper.h"
 #include "polly/Support/ScopHelper.h"
 #include "polly/TempScopInfo.h"
+#include "GPGPU/gpu.h"
+#include "GPGPU/schedule.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/ScalarEvolutionExpander.h"
@@ -636,6 +638,9 @@ private:
                         __isl_take isl_union_map *Schedule);
   void createUser(__isl_take isl_ast_node *User);
   void createBlock(__isl_take isl_ast_node *Block);
+#ifdef GPU_CODEGEN
+  void createForGPGPU(__isl_take isl_ast_node *Node, int BackendType);
+#endif
 };
 
 __isl_give isl_ast_expr *
@@ -950,6 +955,7 @@ void IslNodeBuilder::createSubstitutionsVector(
   isl_ast_expr_free(Expr);
 }
 
+#ifdef GPU_CODEGEN
 static void print_ast_node_as_c_format(__isl_keep isl_ast_node *Ast) {
   isl_printer *p = isl_printer_to_str(isl_ast_node_get_ctx(Ast));
   p = isl_printer_set_output_format(p, ISL_FORMAT_C);
@@ -957,6 +963,41 @@ static void print_ast_node_as_c_format(__isl_keep isl_ast_node *Ast) {
   errs() << isl_printer_get_str(p) << "\n";
   isl_printer_free(p);
 }
+
+void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
+                                    int BackendType) {
+  assert(BackendType == 0 && "We only support PTX codegen currently.");
+
+  BasicBlock::iterator KernelBody;
+  SetVector<Value *> ScalarValues;
+  SetVector<Value *> InArrayValues;
+  SetVector<Value *> OutArrayValues;
+  SetVector<Value *> OldIVS;
+  std::vector<int> NumIterations;
+  IslPTXGenerator::ValueToValueMapTy VMap;
+
+  PTXGen->startGeneration(VMap, &KernelBody);
+  BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
+  Builder.SetInsertPoint(KernelBody);
+
+  // Generate kernel code in the subfunction.
+  isl_id *Id = isl_ast_node_get_annotation(Node);
+  struct ppcg_kernel *Kernel = (struct ppcg_kernel *)isl_id_get_user(Id);
+  isl_id_free(Id);
+  assert(Kernel->tree && "We should have got a kernel isl_ast_node.");
+  if (PTXGen->getOptions()->debug->dump_ast_node)
+    print_ast_node_as_c_format(Kernel->tree);
+  create(isl_ast_node_copy(Kernel->tree));
+  Function *FN = Builder.GetInsertBlock()->getParent();
+
+  // Set back the insert point to host end code.
+  Builder.SetInsertPoint(AfterLoop);
+  // PTXGen->setLaunchingParameters(Kernel);
+  // PTXGen->finishGeneration(FN);
+
+  isl_ast_node_free(Node);
+}
+#endif
 
 void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
   ValueMapT VMap;
@@ -967,7 +1008,20 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
   isl_ast_expr *Expr = isl_ast_node_user_get_expr(User);
   isl_ast_expr *StmtExpr = isl_ast_expr_get_op_arg(Expr, 0);
   Id = isl_ast_expr_get_id(StmtExpr);
-  isl_ast_expr_free(StmtExpr);
+#ifdef GPU_CODEGEN
+  if (GPGPU) {
+    const char *Str = isl_id_get_name(Id);
+    isl_id_free(Id);
+    isl_ast_expr_free(StmtExpr);
+    isl_ast_expr_free(Expr);
+
+    if (!strcmp(Str, "kernel")) {
+      createForGPGPU(User, 0);
+    }
+
+    return;
+  }
+#endif
 
   Stmt = (ScopStmt *)isl_id_get_user(Id);
   createSubstitutions(Expr, Stmt, VMap, LTS);
