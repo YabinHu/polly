@@ -5818,6 +5818,35 @@ static __isl_give isl_printer *print_gpu(__isl_take isl_printer *p, void *user)
 			    gen->print_user);
 }
 
+/* This function is duplicated from ppcg/print.c.
+ * Print a condition for the given "guard" within the given "context"
+ * on "p", calling "fn" with "user" to print the body of the if statement.
+ * If the guard is implied by the context, then no if statement is printed
+ * and the body is printed directly to "p".
+ *
+ * Both "guard" and "context" are assumed to be parameter sets.
+ *
+ * We slightly abuse the AST generator to print this guard.
+ * In particular, we create a trivial schedule for an iteration
+ * domain with a single instance, restriced by the guard.
+ */
+static __isl_give isl_ast_node *ppcg_print_guarded(isl_ctx *ctx,
+	__isl_take isl_set *guard, __isl_take isl_set *context)
+{
+	isl_union_map *schedule;
+	isl_ast_build *build;
+	isl_ast_node *tree;
+	isl_ast_print_options *options;
+
+	guard = isl_set_from_params(guard);
+	schedule = isl_union_map_from_map(isl_map_from_domain(guard));
+	build = isl_ast_build_from_context(context);
+	tree = isl_ast_build_ast_from_schedule(build, schedule);
+	isl_ast_build_free(build);
+
+	return tree;
+}
+
 /* Generate CUDA code for "scop" and print it to "p".
  * After generating an AST for the transformed scop as explained below,
  * we call "gen->print" to print the AST in the desired output format
