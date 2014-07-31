@@ -46,6 +46,11 @@ public:
 
   ~IslPTXGenerator();
 
+  /// @brief Get the guard of generated AST node for host code.
+  __isl_give isl_ast_node *getHostGuard() {
+    return isl_ast_node_copy(Guard);
+  }
+
   /// @brief Get the generated isl AST for GPGPU.
   __isl_give isl_ast_node *getOutputAST() { return isl_ast_node_copy(Tree); }
 
