@@ -558,8 +558,10 @@ private:
   LoopAnnotator &Annotator;
   IslExprBuilder ExprBuilder;
   Pass *P;
+#ifdef GPU_CODEGEN
   IslPTXGenerator *PTXGen;
-
+  ValueMapT GMap;
+#endif
   // This maps an isl_id* to the Value* it has in the generated program. For now
   // on, the only isl_ids that are stored here are the newly calculated loop
   // ivs.
