@@ -16,6 +16,7 @@
 #ifndef POLLY_BLOCK_GENERATORS_H
 #define POLLY_BLOCK_GENERATORS_H
 
+#include "polly/Config/config.h"
 #include "polly/CodeGen/IRBuilder.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
@@ -30,11 +31,18 @@ class Region;
 class ScalarEvolution;
 }
 
+#ifdef GPU_CODEGEN
+struct isl_id_to_ast_expr;
+#endif
+
 namespace polly {
 extern bool SCEVCodegen;
 
 using namespace llvm;
 class ScopStmt;
+#ifdef GPU_CODEGEN
+class IslExprBuilder;
+#endif
 
 typedef DenseMap<const Value *, Value *> ValueMapT;
 typedef std::vector<ValueMapT> VectorValueMapT;
@@ -70,19 +78,40 @@ public:
   ///                  original code new Values they should be replaced with.
   /// @param P         A reference to the pass this function is called from.
   ///                  The pass is needed to update other analysis.
+#ifndef GPU_CODEGEN
   static void generate(PollyIRBuilder &Builder, ScopStmt &Stmt,
                        ValueMapT &GlobalMap, LoopToScevMapT &LTS, Pass *P) {
     BlockGenerator Generator(Builder, Stmt, P);
     Generator.copyBB(GlobalMap, LTS);
   }
+#else
+  static void generate(PollyIRBuilder &Builder, ScopStmt &Stmt,
+                       ValueMapT &GlobalMap, LoopToScevMapT &LTS, Pass *P,
+                       bool GPGPU, IslExprBuilder *ExprBuilder,
+                       __isl_keep isl_id_to_ast_expr *Indexes) {
+    BlockGenerator Generator(Builder, Stmt, P, GPGPU, ExprBuilder, Indexes);
+    Generator.copyBB(GlobalMap, LTS);
+  }
+#endif
 
 protected:
   PollyIRBuilder &Builder;
   ScopStmt &Statement;
   Pass *P;
+#ifdef GPU_CODEGEN
+  bool GPGPU;
+  IslExprBuilder *ExprBuilder;
+  isl_id_to_ast_expr *Indexes;
+#endif
   ScalarEvolution &SE;
 
+#ifndef GPU_CODEGEN
   BlockGenerator(PollyIRBuilder &B, ScopStmt &Stmt, Pass *P);
+#else
+  BlockGenerator(PollyIRBuilder &B, ScopStmt &Stmt, Pass *P, bool GPGPU,
+                 IslExprBuilder *ExprBuilder,
+                 __isl_keep isl_id_to_ast_expr *Indexes);
+#endif
 
   /// @brief Get the new version of a Value.
   ///

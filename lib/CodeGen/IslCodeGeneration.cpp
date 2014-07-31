@@ -1096,6 +1096,7 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
 #ifdef GPU_CODEGEN
   isl_id **IdList = (isl_id **)malloc(5 * sizeof(isl_id *));
   unsigned Pos = 0;
+  struct ppcg_kernel_stmt *KernelStmt = nullptr;
   if (GPGPU) {
     const char *Str = isl_id_get_name(Id);
     // We assume no other IDs called name "kernel".
@@ -1107,8 +1108,7 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
       return;
     }
     isl_id *Anno = isl_ast_node_get_annotation(User);
-    struct ppcg_kernel_stmt *KernelStmt =
-        (struct ppcg_kernel_stmt *)isl_id_get_user(Anno);
+    KernelStmt = (struct ppcg_kernel_stmt *)isl_id_get_user(Anno);
     isl_id_free(Anno);
 
     for (int i = 0; i < 5; ++i)
@@ -1144,9 +1144,19 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
 #endif
 
   createSubstitutions(Expr, Stmt, VMap, LTS);
-  BlockGenerator::generate(Builder, *Stmt, VMap, LTS, P);
 
 #ifdef GPU_CODEGEN
+  isl_id_to_ast_expr *Indexes = nullptr;
+  if (GPGPU) {
+    for (MemoryAccess *Acc : *Stmt) {
+      const Value *Base = Acc->getBaseAddr();
+      Value *FuncArg = GMap[Base];
+      VMap[Base] = FuncArg;
+    }
+    Indexes = KernelStmt->u.d.ref2expr;
+  }
+  BlockGenerator::generate(Builder, *Stmt, VMap, LTS, P, GPGPU, &ExprBuilder,
+                           Indexes);
   if (GPGPU) {
     for (int i = 0; i < Pos; i++) {
       isl_id *GPUId = IdList[i];
@@ -1155,6 +1165,8 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
     }
   }
   free(IdList);
+#else
+  BlockGenerator::generate(Builder, *Stmt, VMap, LTS, P);
 #endif
 
   isl_ast_node_free(User);
