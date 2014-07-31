@@ -83,10 +83,6 @@ public:
   /// @param Bytes        Output array size in bytes.
   void setOutputBytes(unsigned Bytes) { OutputBytes = Bytes; }
 
-  /// @brief Set the parameters for launching PTX kernel.
-  ///
-  void setLaunchingParameters(Value *GridSizeX, Value *GridSizeY);
-
   /// @brief Add synchronization statement to kernel.
   void addKernelSynchronization();
 
@@ -227,6 +223,13 @@ private:
 
   /// @brief Get the Value of CUDA block Z-dimension.
   Value *getCUDABlockDimZ();
+
+  /// @brief Get the grid size from Kernel->grid_size.
+  Value *getGridSize(int Pos);
+
+  /// @brief Set the parameters for launching PTX kernel.
+  ///
+  void setLaunchingParameters();
 
   /// @brief Get the Value of CUDA grid X-dimension.
   Value *getCUDAGridDimX();
