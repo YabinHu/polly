@@ -117,7 +117,7 @@ private:
   /// @brief The generated AST.
   isl_ast_node *Tree;
 
-  /// @brief Information about the current program.
+  /// @brief Information about the current GPU program.
   struct gpu_prog *Prog;
 
   /// @brief Build the internal scop.
