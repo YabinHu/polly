@@ -20,6 +20,7 @@ class Pass;
 class BasicBlock;
 }
 
+struct gpu_array_info;
 struct gpu_array_ref_group;
 struct gpu_prog;
 struct isl_ctx;
@@ -39,7 +40,7 @@ class ScopStmt;
 
 class IslPTXGenerator {
 public:
-  typedef std::map<Value *, Value *> ValueToValueMapTy;
+  typedef DenseMap<const Value *, Value *> ValueToValueMapTy;
 
   IslPTXGenerator(PollyIRBuilder &Builder, IslExprBuilder &ExprBuilder, Pass *P,
                   const std::string &Triple, struct ppcg_options *&Opt);
@@ -47,9 +48,7 @@ public:
   ~IslPTXGenerator();
 
   /// @brief Get the guard of generated AST node for host code.
-  __isl_give isl_ast_node *getHostGuard() {
-    return isl_ast_node_copy(Guard);
-  }
+  __isl_give isl_ast_node *getHostGuard() { return isl_ast_node_copy(Guard); }
 
   /// @brief Get the generated isl AST for GPGPU.
   __isl_give isl_ast_node *getOutputAST() { return isl_ast_node_copy(Tree); }
@@ -94,8 +93,7 @@ public:
 
   /// @brief Get the mapping of device array base address to original
   ///        array base address.
-  void getDeviceArrayBaseAddressMap(ValueToValueMapTy &VMap, Function *F,
-                                    SetVector<Value *> &Addrs);
+  void getDeviceArrayBaseAddressMap(ValueToValueMapTy &VMap, Function *F);
 
 private:
   PollyIRBuilder &Builder;
@@ -129,6 +127,9 @@ private:
   /// @brief Information about the current GPU program.
   struct gpu_prog *Prog;
 
+  /// @brief All the array base addresses in this Scop.
+  SetVector<Value *> BaseAddresses;
+
   /// @brief Build the internal scop.
   void buildScop();
 
@@ -161,6 +162,8 @@ private:
   PointerType *getPtrGPUDevicePtrType(); // %struct.PollyGPUDevicePtrT *
   PointerType *getGPUFunctionPtrType();  // %struct.PollyGPUFunctionT *
   PointerType *getGPUEventPtrType();     // %struct.PollyGPUEventT *
+
+  void initializeBaseAddresses();
 
   /// @brief Create the kernel string containing LLVM IR.
   ///
@@ -196,6 +199,10 @@ private:
                                        Value *Context, Value *Kernel,
                                        Value *Device);
   void createCallBarrierIntrinsic();
+  void allocateDeviceArrays(Value *CUKernel, AllocaInst *PtrParamOffset,
+                            ValueToValueMapTy &VMap);
+  void copyArraysToDevice(ValueToValueMapTy &VMap);
+  void copyArraysFromDevice(ValueToValueMapTy VMap);
 
   /// @brief Create the CUDA subfunction.
   ///
@@ -228,6 +235,9 @@ private:
 
   /// @brief Get the Value of the bytes of the output array.
   Value *getOutputArraySizeInBytes();
+
+  Value *getBaseAddressByName(std::string Name);
+  Value *getArraySize(struct gpu_array_info *Array, isl_set *Context);
 
   /// @brief Erase the ptx-related subfunctions and declarations.
   ///

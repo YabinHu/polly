@@ -81,6 +81,7 @@ IslPTXGenerator::IslPTXGenerator(PollyIRBuilder &Builder,
   buildScop();
   buildGPUKernel();
   initializeGPUDataTypes();
+  initializeBaseAddresses();
 }
 
 IslPTXGenerator::~IslPTXGenerator() {
@@ -100,6 +101,13 @@ polly::Scop *IslPTXGenerator::getPollyScop() {
 }
 
 isl_ctx *IslPTXGenerator::getIslCtx() { return getPollyScop()->getIslCtx(); }
+
+void IslPTXGenerator::initializeBaseAddresses() {
+  polly::Scop *S = getPollyScop();
+  for (ScopStmt *Stmt : *S)
+    for (MemoryAccess *Acc : *Stmt)
+      BaseAddresses.insert(const_cast<Value *>(Acc->getBaseAddr()));
+}
 
 Function *IslPTXGenerator::createSubfunctionDefinition(int NumMemAccs,
                                                        int NumVars) {
@@ -357,11 +365,10 @@ static Type *getElementType(Type *Ty) {
 }
 
 void IslPTXGenerator::getDeviceArrayBaseAddressMap(ValueToValueMapTy &VMap,
-                                                   Function *F,
-                                                   SetVector<Value *> &Addrs) {
+                                                   Function *F) {
   Function::arg_iterator AI = F->arg_begin();
-  for (unsigned j = 0; j < Addrs.size(); j++) {
-    Value *BaseAddr = Addrs[j];
+  for (unsigned j = 0; j < BaseAddresses.size(); j++) {
+    Value *BaseAddr = BaseAddresses[j];
     Type *ArrayTy = BaseAddr->getType();
     Type *EleTy = getElementType(cast<PointerType>(ArrayTy)->getElementType());
     Type *PointerToEleTy = PointerType::getUnqual(EleTy);
@@ -592,6 +599,138 @@ void IslPTXGenerator::createCallSetKernelParameters(Value *Kernel,
                       ParamOffset);
 }
 
+Value *IslPTXGenerator::getBaseAddressByName(std::string Name) {
+  for (Value *Addr : BaseAddresses) {
+    std::string AddrName = "MemRef_" + Addr->getName().str();
+    if (!strcmp(Name.c_str(), AddrName.c_str()))
+      return Addr;
+  }
+
+  return nullptr;
+}
+
+Value *IslPTXGenerator::getArraySize(struct gpu_array_info *Array,
+                                     __isl_take isl_set *Context) {
+  Value *ArraySize = ConstantInt::get(getInt64Type(), 1);
+
+  isl_ast_build *Build = isl_ast_build_from_context(Context);
+  if (!gpu_array_is_scalar(Array)) {
+    isl_ast_expr *Res =
+        isl_ast_build_expr_from_pw_aff(Build, isl_pw_aff_copy(Array->bound[0]));
+    for (int i = 1; i < Array->n_index; i++) {
+      isl_pw_aff *Bound_I = isl_pw_aff_copy(Array->bound[i]);
+      isl_ast_expr *Expr = isl_ast_build_expr_from_pw_aff(Build, Bound_I);
+      Res = isl_ast_expr_mul(Res, Expr);
+    }
+    Value *Bound = ExprBuilder.create(Res);
+    ArraySize = Builder.CreateMul(ArraySize, Bound);
+  }
+
+  isl_ast_build_free(Build);
+  return ArraySize;
+}
+
+/* This function is duplicated from ppcg/cuda.c and modified. */
+void IslPTXGenerator::allocateDeviceArrays(Value *CUKernel,
+                                           AllocaInst *PtrParamOffset,
+                                           ValueToValueMapTy &VMap) {
+  for (int i = 0; i < Prog->n_array; ++i) {
+    if (gpu_array_is_read_only_scalar(&Prog->array[i]))
+      continue;
+
+    std::string ArrayName = Prog->array[i].name;
+    std::string PtrDevName("pdevice_");
+    PtrDevName.append(ArrayName);
+    AllocaInst *PtrDevData =
+        Builder.CreateAlloca(getPtrGPUDevicePtrType(), 0, PtrDevName);
+
+    // allocate memory for input array on the device.
+    Value *ArraySize =
+        getArraySize(&Prog->array[i], isl_set_copy(Prog->context));
+    createCallAllocateMemoryForDevice(PtrDevData, ArraySize);
+
+    std::string DevName("device_");
+    DevName.append(ArrayName);
+    LoadInst *DData = Builder.CreateLoad(PtrDevData, DevName);
+    createCallSetKernelParameters(CUKernel, getCUDABlockDimX(),
+                                  getCUDABlockDimY(), DData, PtrParamOffset);
+    Value *BaseAddr = getBaseAddressByName(ArrayName);
+    VMap[BaseAddr] = DData;
+  }
+}
+
+/* This function is duplicated from ppcg/cuda.c and modified. */
+void IslPTXGenerator::copyArraysToDevice(ValueToValueMapTy &VMap) {
+  int i;
+
+  for (i = 0; i < Prog->n_array; ++i) {
+    isl_space *dim;
+    isl_set *read_i;
+    int empty;
+
+    if (gpu_array_is_read_only_scalar(&Prog->array[i]))
+      continue;
+
+    dim = isl_space_copy(Prog->array[i].space);
+    read_i = isl_union_set_extract_set(Prog->copy_in, dim);
+    empty = isl_set_plain_is_empty(read_i);
+    isl_set_free(read_i);
+    if (empty)
+      continue;
+
+    std::string ArrayName = Prog->array[i].name;
+    Value *BaseAddr = getBaseAddressByName(ArrayName);
+    std::string HostName("host_");
+    HostName.append(ArrayName);
+    Value *HData = nullptr;
+    if (gpu_array_is_scalar(&Prog->array[i])) {
+      AllocaInst *TempHData = Builder.CreateAlloca(BaseAddr->getType(), 0, "");
+      Builder.CreateStore(BaseAddr, TempHData);
+      HData = Builder.CreateBitCast(TempHData, getI8PtrType(), "host_scalar");
+    } else
+      HData = Builder.CreateBitCast(BaseAddr, getI8PtrType(), HostName);
+
+    VMap[VMap[BaseAddr]] = HData;
+    Value *ArraySize =
+        getArraySize(&Prog->array[i], isl_set_copy(Prog->context));
+    createCallCopyFromHostToDevice(VMap[BaseAddr], HData, ArraySize);
+  }
+}
+
+/* This function is duplicated from ppcg/cuda.c and modified.
+ * For each array that needs to be copied out (based on prog->copy_out),
+ * copy the contents back from the GPU to the host.
+ *
+ * If any element of a given array appears in prog->copy_out, then its
+ * entire extent is in prog->copy_out.  The bounds on this extent have
+ * been precomputed in extract_array_info and are used in
+ * gpu_array_info_print_size.
+ */
+void IslPTXGenerator::copyArraysFromDevice(ValueToValueMapTy VMap) {
+  int i;
+
+  for (i = 0; i < Prog->n_array; ++i) {
+    isl_space *dim;
+    isl_set *copy_out_i;
+    int empty;
+
+    dim = isl_space_copy(Prog->array[i].space);
+    copy_out_i = isl_union_set_extract_set(Prog->copy_out, dim);
+    empty = isl_set_plain_is_empty(copy_out_i);
+    isl_set_free(copy_out_i);
+    if (empty)
+      continue;
+
+    std::string ArrayName = Prog->array[i].name;
+    Value *BaseAddr = getBaseAddressByName(ArrayName);
+    Value *ArraySize =
+        getArraySize(&Prog->array[i], isl_set_copy(Prog->context));
+
+    createCallCopyFromDeviceToHost(VMap[VMap[BaseAddr]], VMap[BaseAddr],
+                                   ArraySize);
+  }
+}
+
 void IslPTXGenerator::createCallLaunchKernel(Value *Kernel, Value *GridWidth,
                                              Value *GridHeight) {
   const char *Name = "polly_launchKernel";
@@ -687,9 +826,7 @@ void IslPTXGenerator::addKernelSynchronization() {
   createCallBarrierIntrinsic();
 }
 
-Value *IslPTXGenerator::getCUDAGridDimX() {
-  return GridDimX;
-}
+Value *IslPTXGenerator::getCUDAGridDimX() { return GridDimX; }
 
 Value *IslPTXGenerator::getCUDAGridDimY() {
   if (!GridDimY)
@@ -927,111 +1064,12 @@ void IslPTXGenerator::finishGeneration(Function *F) {
 
   LoadInst *CUKernel = Builder.CreateLoad(PtrCUKernel, "cukernel");
 
-  // Allocate memory space for output array.
-  llvm::ValueToValueMapTy VMap;
-  Value *OutputAddr;
-  SetVector<Value *> OutAValues;
-  SetVector<Value *> InAValues;
-  SetVector<Value *> SValues;
-  // I should initial all three above Value * vector with correct information
-  // initialize(OutAValues, InAValues, SValues);
-  //
+  // Allocate device memory space for copy-in arrays.
+  polly::ValueToValueMap VMap;
+  allocateDeviceArrays(CUKernel, PtrParamOffset, VMap);
 
-  for (SetVector<Value *>::iterator I = OutAValues.begin(),
-                                    E = OutAValues.end();
-       I != E; ++I) {
-    Value *BaseAddr = *I;
-    OutputAddr = BaseAddr;
-    if (const PointerType *PT = dyn_cast<PointerType>(BaseAddr->getType())) {
-      Type *T = PT->getArrayElementType();
-      const ArrayType *ATy = dyn_cast<ArrayType>(T);
-      unsigned Bytes = getArraySizeInBytes(ATy);
-      OutputBytes = Bytes;
-      std::string PtrDevName("pdevice_");
-      PtrDevName.append(BaseAddr->getName().str());
-      AllocaInst *PtrDevData =
-          Builder.CreateAlloca(getPtrGPUDevicePtrType(), 0, PtrDevName);
-      VMap[BaseAddr] = PtrDevData;
-
-      // allocate memory for input array on the device.
-      Value *ArraySize = ConstantInt::get(getInt64Type(), Bytes);
-      createCallAllocateMemoryForDevice(PtrDevData, ArraySize);
-
-      std::string DevName("device_");
-      DevName.append(BaseAddr->getName().str());
-      LoadInst *DData = Builder.CreateLoad(PtrDevData, DevName);
-      createCallSetKernelParameters(CUKernel, getCUDABlockDimX(),
-                                    getCUDABlockDimY(), DData,
-                                    PtrParamOffset);
-
-      if (InAValues.count(BaseAddr)) {
-        std::string HostName("host_");
-        HostName.append(BaseAddr->getName().str());
-        Value *HData =
-            Builder.CreateBitCast(BaseAddr, getI8PtrType(), HostName);
-        createCallCopyFromHostToDevice(DData, HData, ArraySize);
-      }
-    }
-  }
-
-  // Allocate device memory for scalar parameters.
-  for (SetVector<Value *>::iterator I = SValues.begin(), E = SValues.end();
-       I != E; ++I) {
-    Value *SC = *I;
-    unsigned Bytes = SC->getType()->getPrimitiveSizeInBits() / 8;
-    AllocaInst *PtrDevData =
-        Builder.CreateAlloca(getPtrGPUDevicePtrType(), 0, "pdevice_scalar");
-    Value *Size = ConstantInt::get(getInt64Type(), Bytes);
-    createCallAllocateMemoryForDevice(PtrDevData, Size);
-
-    AllocaInst *TempHData = Builder.CreateAlloca(SC->getType(), 0, "");
-    Builder.CreateStore(SC, TempHData);
-    Value *HData =
-        Builder.CreateBitCast(TempHData, getI8PtrType(), "host_scalar");
-    LoadInst *DData = Builder.CreateLoad(PtrDevData, "device_scalar");
-    createCallCopyFromHostToDevice(DData, HData, Size);
-
-    createCallSetKernelParameters(CUKernel, getCUDABlockDimX(),
-                                  getCUDABlockDimY(), DData, PtrParamOffset);
-  }
-
-  // Allocate device memory and its corresponding host memory.
-  // We read from Stmt about the info of memory access.
-  for (SetVector<Value *>::iterator I = InAValues.begin(), E = InAValues.end();
-       I != E; ++I) {
-    Value *BaseAddr = *I;
-    if (OutAValues.count(BaseAddr))
-      continue;
-
-    if (const PointerType *PT = dyn_cast<PointerType>(BaseAddr->getType())) {
-      Type *T = PT->getArrayElementType();
-      const ArrayType *ATy = dyn_cast<ArrayType>(T);
-      unsigned Bytes = getArraySizeInBytes(ATy);
-      std::string PtrDevName("pdevice_");
-      PtrDevName.append(BaseAddr->getName().str());
-      AllocaInst *PtrDevData =
-          Builder.CreateAlloca(getPtrGPUDevicePtrType(), 0, PtrDevName);
-      VMap[BaseAddr] = PtrDevData;
-
-      // allocate memory for input array on the device.
-      Value *ArraySize = ConstantInt::get(getInt64Type(), Bytes);
-      createCallAllocateMemoryForDevice(PtrDevData, ArraySize);
-
-      // copy input array to the device
-      std::string HostName("host_");
-      HostName.append(BaseAddr->getName().str());
-      Value *HData = Builder.CreateBitCast(BaseAddr, getI8PtrType(), HostName);
-      std::string DevName("device_");
-      DevName.append(BaseAddr->getName().str());
-      LoadInst *DData = Builder.CreateLoad(PtrDevData, DevName);
-      createCallCopyFromHostToDevice(DData, HData, ArraySize);
-
-      // add this parameter to gpu function
-      createCallSetKernelParameters(CUKernel, getCUDABlockDimX(),
-                                    getCUDABlockDimY(), DData,
-                                    PtrParamOffset);
-    }
-  }
+  // Copy the results back from the GPU to the host.
+  copyArraysToDevice(VMap);
 
   // Create the start and end timer and record the start time.
   createCallStartTimerByCudaEvent(PtrCUStartEvent, PtrCUStopEvent);
@@ -1040,10 +1078,7 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   createCallLaunchKernel(CUKernel, getCUDAGridDimX(), getCUDAGridDimY());
 
   // Copy the results back from the GPU to the host.
-  // Value *HData = Builder.CreateBitCast(OutputAddr, getI8PtrType(),
-  // "host_data");
-  // LoadInst *DData = Builder.CreateLoad(VMap[OutputAddr], "device_data");
-  // createCallCopyFromDeviceToHost(HData, DData, getOutputArraySizeInBytes());
+  copyArraysFromDevice(VMap);
 
   // Record the end time.
   LoadInst *CUStartEvent = Builder.CreateLoad(PtrCUStartEvent, "start_timer");
@@ -1054,7 +1089,7 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   LoadInst *CUContext = Builder.CreateLoad(PtrCUContext, "cucontext");
   LoadInst *CUDevice = Builder.CreateLoad(PtrCUDevice, "cudevice");
   // createCallCleanupGPGPUResources(DData, CUModule, CUContext, CUKernel,
-  //                                CUDevice);
+  //                                 CUDevice);
 
   // Erase the ptx kernel and device subfunctions and ptx intrinsics from
   // current module.

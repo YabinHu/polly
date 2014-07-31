@@ -1005,11 +1005,6 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   assert(BackendType == 0 && "We only support PTX codegen currently.");
 
   BasicBlock::iterator KernelBody;
-  SetVector<Value *> ScalarValues;
-  SetVector<Value *> InArrayValues;
-  SetVector<Value *> OutArrayValues;
-  SetVector<Value *> OldIVS;
-  std::vector<int> NumIterations;
   IslPTXGenerator::ValueToValueMapTy VMap;
 
   // Generate kernel code in the subfunction.
@@ -1025,12 +1020,7 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   Builder.SetInsertPoint(KernelBody);
 
   Function *FN = Builder.GetInsertBlock()->getParent();
-  SetVector<Value *> Addrs;
-  Scop *S = P->getAnalysis<ScopInfo>().getScop();
-  for (ScopStmt *Stmt : *S)
-    for (MemoryAccess *Acc : *Stmt)
-      Addrs.insert(const_cast<Value *>(Acc->getBaseAddr()));
-  PTXGen->getDeviceArrayBaseAddressMap(GMap, FN, Addrs);
+  PTXGen->getDeviceArrayBaseAddressMap(GMap, FN);
   create(isl_ast_node_copy(Kernel->tree));
 
   // Set back the insert point to host end code.
