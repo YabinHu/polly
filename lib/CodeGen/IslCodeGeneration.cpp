@@ -976,12 +976,9 @@ static void print_ast_node_as_c_format(__isl_keep isl_ast_node *Ast) {
   isl_printer_free(p);
 }
 
-void IslNodeBuilder::createKernelSync() {
-  PTXGen->addKernelSynchronization();
-}
+void IslNodeBuilder::createKernelSync() { PTXGen->addKernelSynchronization(); }
 
-void IslNodeBuilder::createKernelCopy(struct ppcg_kernel_stmt *KernelStmt) {
-}
+void IslNodeBuilder::createKernelCopy(struct ppcg_kernel_stmt *KernelStmt) {}
 
 void IslNodeBuilder::createKernelDomain(struct ppcg_kernel_stmt *KernelStmt) {
   ScopStmt *Stmt = KernelStmt->u.d.stmt->stmt;
@@ -1057,8 +1054,8 @@ static void collect_id_from_ast_expr(__isl_keep isl_ast_expr *Expr,
   if (isl_ast_expr_get_type(Expr) == isl_ast_expr_id) {
     isl_id *Id = isl_ast_expr_get_id(Expr);
     const char *Name = isl_id_get_name(Id);
-    if (!strcmp(Name, "b0") || !strcmp(Name, "b1") || !strcmp(Name, "t0")
-        || !strcmp(Name, "t1") || !strcmp(Name, "t2"))
+    if (!strcmp(Name, "b0") || !strcmp(Name, "b1") || !strcmp(Name, "t0") ||
+        !strcmp(Name, "t1") || !strcmp(Name, "t2"))
       IdList.push_back(Id);
     else
       isl_id_free(Id);
@@ -1104,8 +1101,8 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
         (struct ppcg_kernel_stmt *)isl_id_get_user(Anno);
     isl_id_free(Anno);
 
-    switch(KernelStmt->type) {
-    case ppcg_kernel_domain:
+    switch (KernelStmt->type) {
+    case ppcg_kernel_domain: {
       Stmt = KernelStmt->u.d.stmt->stmt;
       collect_id_list_from_ast_expr(Expr, IdList);
       for (isl_id *GPUId : IdList) {
@@ -1113,9 +1110,9 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
         Value *IDValue = PTXGen->getValueOfGPUID(Name);
         IDToValue[GPUId] = IDValue;
       }
-      break;
+    } break;
     case ppcg_kernel_copy:
-      //createKernelCopy(KernelStmt);
+      // createKernelCopy(KernelStmt);
       isl_ast_expr_free(Expr);
       isl_ast_node_free(User);
       isl_id_free(Id);
