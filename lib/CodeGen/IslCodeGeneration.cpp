@@ -647,6 +647,9 @@ private:
   void createUser(__isl_take isl_ast_node *User);
   void createBlock(__isl_take isl_ast_node *Block);
 #ifdef GPU_CODEGEN
+  void createKernelDomain(struct ppcg_kernel_stmt *Stmt);
+  void createKernelCopy(struct ppcg_kernel_stmt *Stmt);
+  void createKernelSync();
   void createForGPGPU(__isl_take isl_ast_node *Node, int BackendType);
 #endif
 };
@@ -972,6 +975,18 @@ static void print_ast_node_as_c_format(__isl_keep isl_ast_node *Ast) {
   isl_printer_free(p);
 }
 
+void IslNodeBuilder::createKernelSync() {
+  PTXGen->addKernelSynchronization();
+}
+
+void IslNodeBuilder::createKernelCopy(struct ppcg_kernel_stmt *KernelStmt) {
+}
+
+void IslNodeBuilder::createKernelDomain(struct ppcg_kernel_stmt *KernelStmt) {
+  ScopStmt *Stmt = KernelStmt->u.d.stmt->stmt;
+  Stmt->dump();
+}
+
 void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
                                     int BackendType) {
   assert(BackendType == 0 && "We only support PTX codegen currently.");
@@ -984,10 +999,6 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   std::vector<int> NumIterations;
   IslPTXGenerator::ValueToValueMapTy VMap;
 
-  PTXGen->startGeneration(VMap, &KernelBody);
-  BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
-  Builder.SetInsertPoint(KernelBody);
-
   // Generate kernel code in the subfunction.
   isl_id *Id = isl_ast_node_get_annotation(Node);
   struct ppcg_kernel *Kernel = (struct ppcg_kernel *)isl_id_get_user(Id);
@@ -995,6 +1006,12 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   assert(Kernel->tree && "We should have got a kernel isl_ast_node.");
   if (PTXGen->getOptions()->debug->dump_ast_node)
     print_ast_node_as_c_format(Kernel->tree);
+
+  PTXGen->setGPUKernel(Kernel);
+  PTXGen->startGeneration(VMap, &KernelBody);
+  BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
+  Builder.SetInsertPoint(KernelBody);
+
   create(isl_ast_node_copy(Kernel->tree));
   Function *FN = Builder.GetInsertBlock()->getParent();
 
@@ -1003,6 +1020,7 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   // PTXGen->setLaunchingParameters(Kernel);
   PTXGen->finishGeneration(FN);
 
+  PTXGen->setGPUKernel(nullptr);
   isl_ast_node_free(Node);
 }
 #endif
@@ -1020,13 +1038,34 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
 #ifdef GPU_CODEGEN
   if (GPGPU) {
     const char *Str = isl_id_get_name(Id);
-    isl_id_free(Id);
-    isl_ast_expr_free(Expr);
-
+    // We assume no other IDs called name "kernel".
     if (!strcmp(Str, "kernel")) {
       createForGPGPU(User, 0);
+
+      isl_ast_expr_free(Expr);
+      isl_id_free(Id);
+      return;
+    }
+    isl_id *Anno = isl_ast_node_get_annotation(User);
+    struct ppcg_kernel_stmt *KernelStmt =
+        (struct ppcg_kernel_stmt *)isl_id_get_user(Anno);
+    isl_id_free(Anno);
+
+    switch(KernelStmt->type) {
+    case ppcg_kernel_domain:
+      createKernelDomain(KernelStmt);
+      break;
+    case ppcg_kernel_copy:
+      //createKernelCopy(KernelStmt);
+      break;
+    case ppcg_kernel_sync:
+      createKernelSync();
+      break;
     }
 
+    isl_ast_expr_free(Expr);
+    isl_ast_node_free(User);
+    isl_id_free(Id);
     return;
   }
 #endif
