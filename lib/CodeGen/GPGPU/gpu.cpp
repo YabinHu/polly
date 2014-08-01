@@ -5954,7 +5954,7 @@ static __isl_give isl_ast_node *ppcg_print_guarded(isl_ctx *ctx,
  * Finally, we generate code for the remaining loops in a similar fashion.
  */
 static int generate(isl_ctx *ctx, struct gpu_gen *gen, struct ppcg_scop *scop,
-	struct ppcg_options *options)
+	struct ppcg_options *options, struct gen_ext *ext)
 {
 	struct gpu_prog *prog;
 	isl_set *context, *guard;
@@ -5976,6 +5976,11 @@ static int generate(isl_ctx *ctx, struct gpu_gen *gen, struct ppcg_scop *scop,
 
 	compute_copy_in_and_out(gen);
 	gen->tree = generate_host_code(gen);
+	ext->guard = ppcg_print_guarded(ctx, guard, context);
+	ext->tree = gen->tree;
+	ext->prog = gen->prog;
+
+	isl_union_map_free(gen->sched);
 
 	return 0;
 }
@@ -5984,7 +5989,7 @@ static int generate(isl_ctx *ctx, struct gpu_gen *gen, struct ppcg_scop *scop,
  * all scops by corresponding GPU code and write the results to "out".
  */
 int generate_gpu(isl_ctx *ctx, struct ppcg_scop *scop,
-	struct ppcg_options *options)
+	struct ppcg_options *options, struct gen_ext *ext)
 {
 	struct gpu_gen gen;
 	int r;
@@ -6004,7 +6009,7 @@ int generate_gpu(isl_ctx *ctx, struct ppcg_scop *scop,
 		gen.used_sizes = isl_union_map_empty(space);
 	}
 
-        r = generate(ctx, &gen, scop, options);
+	r = generate(ctx, &gen, scop, options, ext);
 
 	if (options->debug->dump_sizes) {
 		isl_union_map_dump(gen.used_sizes);

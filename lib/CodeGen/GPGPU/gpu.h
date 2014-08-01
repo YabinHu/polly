@@ -240,6 +240,5 @@ struct gpu_prog *gpu_prog_alloc(isl_ctx *ctx, struct ppcg_scop *scop);
 void *gpu_prog_free(struct gpu_prog *prog);
 
 int generate_gpu(isl_ctx *ctx, struct ppcg_scop *scop,
-	struct ppcg_options *options);
-
+	struct ppcg_options *options, struct gen_ext *ext);
 #endif
