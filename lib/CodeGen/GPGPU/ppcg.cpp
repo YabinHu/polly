@@ -1104,7 +1104,7 @@ static __isl_give isl_union_map *collectSchedule(Scop *S) {
  * so the pet_scop should not be freed before the ppcg_scop.
  */
 struct ppcg_scop *
-ppcg_scop_from_pet_scop(Scop *scop, struct ppcg_options *options)
+ppcg_scop_from_polly_scop(Scop *scop, struct ppcg_options *options)
 {
 	int i;
 	isl_ctx *ctx;
