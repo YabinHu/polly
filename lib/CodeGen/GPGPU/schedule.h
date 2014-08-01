@@ -1,6 +1,10 @@
 #ifndef _SCHEDULE_H
 #define _SCHEDULE_H
 
+namespace polly {
+  class ScopStmt;
+}
+
 /* An access to an array element or an iterator.
  * Accesses to iterators have an access relation that maps to an unnamed space.
  * An access may be both read and write.
@@ -32,7 +36,7 @@ struct gpu_stmt_access {
 
 struct gpu_stmt {
 	isl_id *id;
-	struct pet_stmt *stmt;
+	polly::ScopStmt *stmt;
 
 	/* Number of tile dimensions. */
 	int tile_len;
