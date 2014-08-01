@@ -18,6 +18,7 @@ set(ISL_CODEGEN_FILES
 if (GPU_CODEGEN)
   set (GPGPU_CODEGEN_FILES
        CodeGen/PTXGenerator.cpp
+       CodeGen/GPGPU/IslPTXGenerator.cpp
        CodeGen/GPGPU/gpu.cpp
        CodeGen/GPGPU/ppcg.cpp
        CodeGen/GPGPU/schedule.cpp)
