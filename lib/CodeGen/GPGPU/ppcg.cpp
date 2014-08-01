@@ -804,7 +804,7 @@ extractArraysInfo(polly::Scop *S,
   return Arrays;
 }
 
-static void *ppcg_scop_free(struct ppcg_scop *ps)
+void *ppcg_scop_free(struct ppcg_scop *ps)
 {
 	if (!ps)
 		return NULL;
@@ -848,8 +848,8 @@ static void *ppcg_scop_free(struct ppcg_scop *ps)
  *
  *	[D[i] -> id[]] -> A[a]
  */
-static __isl_give isl_map *tag_access(__isl_take isl_map *access,
-                                      __isl_take isl_id *id) {
+__isl_give isl_map *tag_access(__isl_take isl_map *access,
+                               __isl_take isl_id *id) {
   isl_space *space;
   isl_map *add_tag;
 
