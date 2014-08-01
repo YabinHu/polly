@@ -85,6 +85,9 @@ public:
   /// @brief Add synchronization statement to kernel.
   void addKernelSynchronization();
 
+  /// @brief Get the Value of GPU block id or thread id by Name.
+  Value *getValueOfGPUID(const char *Name);
+
 private:
   PollyIRBuilder &Builder;
   IslExprBuilder &ExprBuilder;
@@ -134,6 +137,9 @@ private:
 
   /// @brief Polly's GPU data types.
   StructType *ContextTy, *ModuleTy, *KernelTy, *DeviceTy, *DevDataTy, *EventTy;
+
+  /// @brief GPU execution block ids and thread ids.
+  Value *BIDx, *BIDy, *TIDx, *TIDy, *TIDz;
 
   void initializeGPUDataTypes();
   IntegerType *getInt64Type();           // i64
