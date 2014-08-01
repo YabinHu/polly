@@ -75,7 +75,7 @@ __isl_give isl_set *extend(__isl_take isl_set *set, int dst_len)
  */
 static int update_max_out(__isl_take isl_map *map, void *user)
 {
-	int *max_out = user;
+	int *max_out = (int *)user;
 	int n_out = isl_map_dim(map, isl_dim_out);
 
 	if (n_out > *max_out)
@@ -95,7 +95,7 @@ struct align_range_data {
  */
 static int map_align_range(__isl_take isl_map *map, void *user)
 {
-	struct align_range_data *data = user;
+	struct align_range_data *data = (struct align_range_data *)user;
 	int i;
 	isl_space *dim;
 	isl_map *proj;

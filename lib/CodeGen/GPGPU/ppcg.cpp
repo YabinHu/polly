@@ -20,6 +20,7 @@
 #include <isl/schedule.h>
 #include <isl/ast_build.h>
 #include <isl/schedule.h>
+
 #include "ppcg.h"
 #include "ppcg_options.h"
 
@@ -37,6 +38,7 @@ static void print_version(void)
 	printf("%s", ppcg_version());
 }
 
+#if 0
 ISL_ARGS_START(struct options, options_args)
 ISL_ARG_CHILD(struct options, isl, "isl", &isl_options_args, "isl options")
 ISL_ARG_CHILD(struct options, pet, "pet", &pet_options_args, "pet options")
@@ -48,6 +50,7 @@ ISL_ARG_VERSION(print_version)
 ISL_ARGS_END
 
 ISL_ARG_DEF(options, struct options, options_args)
+#endif
 
 /* Return a pointer to the final path component of "filename" or
  * to "filename" itself if it does not contain any components.
@@ -140,7 +143,7 @@ static __isl_give isl_union_set *collect_non_kill_domains(struct pet_scop *scop)
  */
 static int set_has_call(__isl_keep pet_expr *expr, void *user)
 {
-	int *has_call = user;
+	int *has_call = (int *)user;
 
 	*has_call = 1;
 
@@ -166,7 +169,7 @@ static int expr_has_call(__isl_keep pet_expr *expr)
  */
 static int check_call(__isl_keep pet_expr *expr, void *user)
 {
-	int *has_call = user;
+	int *has_call = (int *)user;
 
 	if (expr_has_call(expr))
 		*has_call = 1;
@@ -611,7 +614,7 @@ static struct ppcg_scop *ppcg_scop_from_pet_scop(struct pet_scop *scop,
 
 	if (!scop)
 		return NULL;
-
+#if 0
 	ctx = isl_set_get_ctx(scop->context);
 
 	ps = isl_calloc_type(ctx, struct ppcg_scop);
@@ -645,6 +648,7 @@ static struct ppcg_scop *ppcg_scop_from_pet_scop(struct pet_scop *scop,
 	for (i = 0; i < ps->n_independence; ++i)
 		ps->independence = isl_union_map_union(ps->independence,
 			isl_union_map_copy(ps->independences[i]->filter));
+#endif
 
 	compute_tagger(ps);
 	compute_dependences(ps);
@@ -653,7 +657,7 @@ static struct ppcg_scop *ppcg_scop_from_pet_scop(struct pet_scop *scop,
 	if (!ps->context || !ps->domain || !ps->call || !ps->reads ||
 	    !ps->may_writes || !ps->must_writes || !ps->tagged_must_kills ||
 	    !ps->schedule || !ps->independence)
-		return ppcg_scop_free(ps);
+		return (struct ppcg_scop *)ppcg_scop_free(ps);
 
 	return ps;
 }
@@ -678,7 +682,7 @@ struct ppcg_transform_data {
 static __isl_give isl_printer *transform(__isl_take isl_printer *p,
 	struct pet_scop *scop, void *user)
 {
-	struct ppcg_transform_data *data = user;
+	struct ppcg_transform_data *data = (struct ppcg_transform_data *)user;
 	struct ppcg_scop *ps;
 
 	if (!pet_scop_can_build_ast_exprs(scop) ||

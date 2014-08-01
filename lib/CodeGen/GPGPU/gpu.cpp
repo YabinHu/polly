@@ -752,7 +752,8 @@ struct ppcg_extract_size_data {
  */
 static int extract_size_of_type(__isl_take isl_set *size, void *user)
 {
-	struct ppcg_extract_size_data *data = user;
+	struct ppcg_extract_size_data *data =
+ 	       (struct ppcg_extract_size_data *)user;
 	const char *name;
 
 	name = isl_set_get_tuple_name(size);
@@ -1722,7 +1723,7 @@ static int check_unroll(__isl_take isl_set *set, __isl_take isl_multi_aff *ma,
 	int i, j;
 	int n_in = isl_multi_aff_dim(ma, isl_dim_in);
 	int n_out = isl_multi_aff_dim(ma, isl_dim_out);
-	int *unroll = user;
+	int *unroll = (int *)user;
 
 	for (i = 0; i < n_out; ++i) {
 		isl_aff *aff;
@@ -1784,7 +1785,9 @@ static void remove_private_tiles(struct gpu_gen *gen)
 		for (j = 0; j < array->n_group; ++j) {
 			struct gpu_array_ref_group *group = array->groups[j];
 
-			group->private_tile = free_tile(group->private_tile);
+			group->private_tile =
+                                (struct gpu_array_tile *)free_tile(
+                                        group->private_tile);
 		}
 	}
 }
@@ -1958,7 +1961,7 @@ static int check_stride_constraint(__isl_take isl_constraint *c, void *user)
 	isl_ctx *ctx;
 	isl_val *v;
 	unsigned n_div;
-	struct gpu_array_bound *bound = user;
+	struct gpu_array_bound *bound = (struct gpu_array_bound *)user;
 
 	ctx = isl_constraint_get_ctx(c);
 	n_div = isl_constraint_dim(c, isl_dim_div);
@@ -2094,7 +2097,7 @@ struct gpu_size_info {
  */
 static int compute_size_in_direction(__isl_take isl_constraint *c, void *user)
 {
-	struct gpu_size_info *size = user;
+	struct gpu_size_info *size = (struct gpu_size_info *)user;
 	unsigned nparam;
 	unsigned n_div;
 	isl_val *v;
@@ -2397,12 +2400,12 @@ static void set_last_shared(struct gpu_gen *gen,
 static void compute_private_access(struct gpu_gen *gen)
 {
 	int i, j;
-	isl_union_map *private;
+	isl_union_map *priv_umap;
 
 	if (!gen->options->use_private_memory)
 		return;
 
-	private = isl_union_map_empty(isl_union_map_get_space(gen->shared_sched));
+	priv_umap = isl_union_map_empty(isl_union_map_get_space(gen->shared_sched));
 
 	for (i = 0; i < gen->prog->n_array; ++i) {
 		struct gpu_array_info *array = &gen->prog->array[i];
@@ -2416,21 +2419,21 @@ static void compute_private_access(struct gpu_gen *gen)
 			if (!array->groups[j]->private_tile)
 				continue;
 
-			private = isl_union_map_union(private,
+			priv_umap = isl_union_map_union(priv_umap,
 				group_access_relation(array->groups[j], 1, 1));
 		}
 	}
 
-	if (isl_union_map_is_empty(private))
-		isl_union_map_free(private);
+	if (isl_union_map_is_empty(priv_umap))
+		isl_union_map_free(priv_umap);
 	else {
 		isl_union_map *priv;
 
-		private = isl_union_map_apply_domain(private,
+		priv_umap = isl_union_map_apply_domain(priv_umap,
 					isl_union_map_copy(gen->shared_sched));
 		priv = isl_union_map_from_map(isl_map_copy(gen->privatization));
-		private = isl_union_map_apply_domain(private, priv);
-		gen->private_access = private;
+		priv_umap = isl_union_map_apply_domain(priv_umap, priv);
+		gen->private_access = priv_umap;
 	}
 }
 
@@ -2494,7 +2497,9 @@ static void check_shared_memory_bound(struct gpu_gen *gen)
 			}
 			isl_val_free(size);
 
-			group->shared_tile = free_tile(group->shared_tile);
+			group->shared_tile =
+                                (struct gpu_array_tile *)free_tile(
+                                        group->shared_tile);
 		}
 	}
 
@@ -2880,7 +2885,9 @@ static int compute_group_bounds_core(struct gpu_gen *gen,
 	if (use_shared && (!no_reuse || !access_is_coalesced(gen, access))) {
 		group->shared_tile = create_tile(ctx, group->array->n_index);
 		if (!can_tile(group->access, group->shared_tile))
-			group->shared_tile = free_tile(group->shared_tile);
+			group->shared_tile =
+                                (struct gpu_array_tile *)free_tile(
+                                        group->shared_tile);
 	}
 
 	if (!force_private && (!use_private || no_reuse)) {
@@ -2901,7 +2908,8 @@ static int compute_group_bounds_core(struct gpu_gen *gen,
 	group->private_tile = create_tile(gen->ctx, n_index);
 	acc = isl_map_apply_domain(acc, isl_map_copy(gen->privatization));
 	if (!can_tile(acc, group->private_tile))
-		group->private_tile = free_tile(group->private_tile);
+		group->private_tile =
+                        (struct gpu_array_tile *)free_tile(group->private_tile);
 
 	isl_map_free(acc);
 
@@ -3453,7 +3461,7 @@ static void extract_block_size(struct gpu_gen *gen, struct ppcg_kernel *kernel)
 
 void ppcg_kernel_free(void *user)
 {
-	struct ppcg_kernel *kernel = user;
+	struct ppcg_kernel *kernel = (struct ppcg_kernel *)user;
 	int i;
 
 	if (!kernel)
@@ -3632,7 +3640,7 @@ static int extract_tile_len(__isl_take isl_map *map, void *user)
 void ppcg_kernel_stmt_free(void *user)
 {
 	int i;
-	struct ppcg_kernel_stmt *stmt = user;
+	struct ppcg_kernel_stmt *stmt = (struct ppcg_kernel_stmt *)user;
 
 	if (!stmt)
 		return;
@@ -3834,7 +3842,7 @@ static __isl_give isl_multi_pw_aff *transform_index(
 	__isl_take isl_multi_pw_aff *index, __isl_keep isl_id *ref_id,
 	void *user)
 {
-	struct ppcg_transform_data *data = user;
+	struct ppcg_transform_data *data = (struct ppcg_transform_data *)user;
 	struct gpu_stmt_access *access;
 	struct gpu_array_ref_group *group;
 	struct gpu_array_tile *tile;
@@ -4010,7 +4018,7 @@ __isl_give isl_ast_expr *gpu_local_array_info_linearize_index(
 static __isl_give isl_ast_expr *transform_expr(__isl_take isl_ast_expr *expr,
 	__isl_keep isl_id *id, void *user)
 {
-	struct ppcg_transform_data *data = user;
+	struct ppcg_transform_data *data = (struct ppcg_transform_data *)user;
 
 	if (!data->array)
 		return expr;
@@ -4077,7 +4085,6 @@ static __isl_give isl_ast_node *at_each_domain(__isl_take isl_ast_node *node,
 	stmt->u.d.ref2expr = pet_stmt_build_ast_exprs(stmt->u.d.stmt->stmt,
 					    build, &transform_index, &data,
 					    &transform_expr, &data);
-
 	isl_id_free(id);
 	isl_pw_multi_aff_free(iterator_map);
 	isl_pw_multi_aff_free(sched2shared);
@@ -4250,7 +4257,7 @@ static __isl_give isl_ast_node *attach_copy_stmt(__isl_take isl_ast_node *node,
 static __isl_give isl_ast_node *copy_access(struct gpu_gen *gen,
 	__isl_take isl_map *sched,
 	const char *type, struct gpu_array_ref_group *group,
-	__isl_take isl_ast_build *build, int private)
+	__isl_take isl_ast_build *build, int priv)
 {
 	isl_space *space;
 	isl_ast_node *tree;
@@ -4263,7 +4270,7 @@ static __isl_give isl_ast_node *copy_access(struct gpu_gen *gen,
 
 	schedule = isl_map_copy(shift);
 	schedule = isl_map_reset_tuple_id(schedule, isl_dim_out);
-	if (!private)
+	if (!priv)
 		schedule = tile_access_schedule(gen, schedule);
 
 	n = isl_map_dim(schedule, isl_dim_out);
@@ -4285,7 +4292,7 @@ static __isl_give isl_ast_node *copy_access(struct gpu_gen *gen,
 
 	gen->copy_group = group;
 
-	if (private) {
+	if (priv) {
 		space = isl_space_range(isl_map_get_space(schedule));
 		space = isl_space_range(isl_space_unwrap(space));
 		build = set_unroll(build, space, 0);
@@ -4429,7 +4436,7 @@ static __isl_give isl_ast_node *create_access_leaf(
 	isl_id *id;
 
 	id = isl_map_get_tuple_id(schedule, isl_dim_in);
-	group = isl_id_get_user(id);
+	group = (struct gpu_array_ref_group *)isl_id_get_user(id);
 	isl_id_free(id);
 
 	if (group->private_tile)
@@ -5067,7 +5074,7 @@ static __isl_give isl_ast_node *generate_kernel(struct gpu_gen *gen,
 static __isl_give isl_ast_node *attach_id(__isl_take isl_ast_node *node,
 	__isl_keep isl_ast_build *build, void *user)
 {
-	isl_id *id = user;
+	isl_id *id = (isl_id *)user;
 
 	node = isl_ast_node_set_annotation(node, id);
 
@@ -5277,7 +5284,7 @@ struct band_info {
  */
 static int set_stmt_tile_len(__isl_take isl_map *map, void *user)
 {
-	struct band_info *info = user;
+	struct band_info *info = (struct band_info *)user;
 	struct gpu_stmt *stmt;
 	isl_id *id;
 
@@ -5346,8 +5353,8 @@ static void band_select_outer_band(struct gpu_gen *gen,
  */
 static int cmp_band(const void *p1, const void *p2)
 {
-	const struct band_info *info1 = p1;
-	const struct band_info *info2 = p2;
+	const struct band_info *info1 = (const struct band_info *)p1;
+	const struct band_info *info2 = (const struct band_info *)p2;
 
 	if (info1->tile_len != info2->tile_len)
 		return info1->tile_len - info2->tile_len;
@@ -5507,7 +5514,7 @@ static __isl_give isl_union_map *select_outer_tilable_band(struct gpu_gen *gen,
  */
 static int set_untiled_len(__isl_take isl_map *map, void *user)
 {
-	unsigned *untiled_len = user;
+	unsigned *untiled_len = (unsigned *)user;
 
 	*untiled_len = isl_map_dim(map, isl_dim_out);
 
@@ -5729,7 +5736,8 @@ struct ppcg_extract_access_data {
  */
 static int extract_access(__isl_keep pet_expr *expr, void *user)
 {
-	struct ppcg_extract_access_data *data = user;
+	struct ppcg_extract_access_data *data =
+                (struct ppcg_extract_access_data *)user;
 	isl_map *may;
 	struct gpu_stmt_access *access;
 	isl_ctx *ctx;
@@ -5771,9 +5779,9 @@ static void pet_stmt_extract_accesses(struct gpu_stmt *stmt)
 
 	stmt->accesses = NULL;
 	data.next_access = &stmt->accesses;
-	data.single_expression =
-		pet_tree_get_type(stmt->stmt->body) == pet_tree_expr;
-	pet_tree_foreach_access_expr(stmt->stmt->body, &extract_access, &data);
+	//data.single_expression =
+	//	pet_tree_get_type(stmt->stmt->body) == pet_tree_expr;
+	// pet_tree_foreach_access_expr(stmt->stmt->body, &extract_access, &data);
 }
 
 /* Return an array of gpu_stmt representing the statements in "scop".
@@ -5803,7 +5811,7 @@ static struct gpu_stmt *extract_stmts(isl_ctx *ctx, struct ppcg_scop *scop,
  */
 static __isl_give isl_printer *print_gpu(__isl_take isl_printer *p, void *user)
 {
-	struct gpu_gen *gen = user;
+	struct gpu_gen *gen = (struct gpu_gen *)user;
 
 	return gen->print(p, gen->prog, gen->tree, &gen->types,
 			    gen->print_user);
@@ -5980,10 +5988,10 @@ struct gpu_prog *gpu_prog_alloc(isl_ctx *ctx, struct ppcg_scop *scop)
 	prog->to_outer = isl_union_map_reverse(prog->to_outer);
 
 	if (!prog->stmts)
-		return gpu_prog_free(prog);
+		return (struct gpu_prog *)gpu_prog_free(prog);
 
 	if (collect_array_info(prog) < 0)
-		return gpu_prog_free(prog);
+		return (struct gpu_prog *)gpu_prog_free(prog);
 
 	return prog;
 }
