@@ -5,6 +5,7 @@
 
 #ifdef GPU_CODEGEN
 #include "polly/CodeGen/IRBuilder.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SetVector.h"
 
 #include "isl/ast.h"
@@ -41,7 +42,7 @@ class ScopStmt;
 class IslPTXGenerator {
 public:
   typedef DenseMap<const Value *, Value *> ValueToValueMapTy;
-  typedef std::map<isl_id *, Value *> IDToValueTy;
+  typedef llvm::MapVector<isl_id *, llvm::Value *> IDToValueTy;
 
   IslPTXGenerator(PollyIRBuilder &Builder, IslExprBuilder &ExprBuilder, Pass *P,
                   const std::string &Triple, struct ppcg_options *&Opt);
@@ -55,7 +56,9 @@ public:
   __isl_give isl_ast_node *getOutputAST() { return isl_ast_node_copy(Tree); }
 
   /// @brief Get the options for GPGPU code generation.
-  struct ppcg_options *getOptions() { return Options; }
+  struct ppcg_options *getOptions() {
+    return Options;
+  }
 
   /// @brief Create a GPGPU parallel loop.
   ///
@@ -118,6 +121,9 @@ private:
   /// @brief All the array base addresses in this Scop.
   SetVector<Value *> BaseAddresses;
 
+  /// @brief All the host iterators that copy into the kernel.
+  SetVector<Value *> HostIterators;
+
   /// @brief Build the internal scop.
   void buildScop();
 
@@ -132,6 +138,12 @@ private:
   polly::Scop *getPollyScop();
 
   isl_ctx *getIslCtx();
+
+  /// @brief Store the host iterator Value in HostIterators.
+  void setHostIterators(IDToValueTy &IDToValue);
+
+  /// @brief Clear HostIterators.
+  void clearHostIterators();
 
   /// @brief Polly's GPU data types.
   StructType *ContextTy, *ModuleTy, *KernelTy, *DeviceTy, *DevDataTy, *EventTy;
@@ -188,6 +200,9 @@ private:
   void allocateDeviceArrays(Value *CUKernel, AllocaInst *PtrParamOffset,
                             ValueToValueMapTy &VMap);
   void copyArraysToDevice(ValueToValueMapTy &VMap);
+  void allocateDeviceArguments(Value *CUKernel, AllocaInst *PtrParamOffset,
+                               ValueToValueMapTy &VMap);
+  void copyArgumentsToDevice(ValueToValueMapTy &VMap);
   void copyArraysFromDevice(ValueToValueMapTy VMap);
 
   /// @brief Create the CUDA subfunction.
