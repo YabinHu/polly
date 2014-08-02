@@ -179,7 +179,9 @@ private:
   void createCallInitDevice(Value *Context, Value *Device);
   void createCallGetPTXModule(Value *Buffer, Value *Module);
   void createCallGetPTXKernelEntry(Value *Entry, Value *Module, Value *Kernel);
-  void createCallAllocateMemoryForDevice(Value *DeviceData, Value *Size);
+  void createCallInitDevDataArray(Value *DevDataArray);
+  void createCallAllocateMemoryForDevice(Value *DevDataArray, Value *DevData,
+                                         Value *Size, Value *NumDevData);
   void createCallCopyFromHostToDevice(Value *DeviceData, Value *HostData,
                                       Value *Size);
   void createCallCopyFromDeviceToHost(Value *HostData, Value *DeviceData,
@@ -193,14 +195,18 @@ private:
   void createCallStartTimerByCudaEvent(Value *StartEvent, Value *StopEvent);
   void createCallStopTimerByCudaEvent(Value *StartEvent, Value *StopEvent,
                                       Value *Timer);
-  void createCallCleanupGPGPUResources(Value *DeviceData, Value *Module,
-                                       Value *Context, Value *Kernel,
-                                       Value *Device);
+  void createCallFreeDeviceMemory(Value *DevDataArray, Value *NumDevData);
+  void createCallCleanupGPGPUResources(Value *Module, Value *Context,
+                                       Value *Kernel, Value *Device);
   void createCallBarrierIntrinsic();
-  void allocateDeviceArrays(Value *CUKernel, AllocaInst *PtrParamOffset,
+  void allocateDeviceArrays(Value *CUKernel, LoadInst *DevDataArray,
+                            AllocaInst *PtrNumDevData,
+                            AllocaInst *PtrParamOffset,
                             ValueToValueMapTy &VMap);
   void copyArraysToDevice(ValueToValueMapTy &VMap);
-  void allocateDeviceArguments(Value *CUKernel, AllocaInst *PtrParamOffset,
+  void allocateDeviceArguments(Value *CUKernel, LoadInst *DevDataArray,
+                               AllocaInst *PtrNumDevData,
+                               AllocaInst *PtrParamOffset,
                                ValueToValueMapTy &VMap);
   void copyArgumentsToDevice(ValueToValueMapTy &VMap);
   void copyArraysFromDevice(ValueToValueMapTy VMap);
