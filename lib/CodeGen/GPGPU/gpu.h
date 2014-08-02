@@ -229,6 +229,9 @@ struct ppcg_kernel {
 	int n_var;
 	struct ppcg_kernel_var *var;
 
+        int n_gpuid;
+        isl_id **gpuid;
+
 	isl_ast_node *tree;
 };
 

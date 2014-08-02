@@ -3487,6 +3487,10 @@ void ppcg_kernel_free(void *user)
 	}
 	free(kernel->var);
 
+	for (i = 0; i< kernel->n_gpuid; ++i)
+		isl_id_free(kernel->gpuid[i]);
+	free(kernel->gpuid);
+
 	free(kernel);
 }
 
@@ -5152,7 +5156,8 @@ static __isl_give isl_ast_node *create_host_leaf(
 	isl_union_map *local_sched;
 	isl_union_map *access;
 	isl_union_set *domain;
-	int i;
+	isl_space *space;
+        int i;
 
 	schedule = isl_ast_build_get_schedule(build);
 
@@ -5188,6 +5193,12 @@ static __isl_give isl_ast_node *create_host_leaf(
 	kernel->arrays = isl_union_set_apply(kernel->arrays,
 				isl_union_map_copy(gen->prog->to_outer));
 	kernel->space = isl_ast_build_get_schedule_space(build);
+	space = isl_union_map_get_space(gen->local_sched);
+	kernel->n_gpuid = isl_space_dim(space, isl_dim_param);
+	kernel->gpuid = (isl_id **)malloc(kernel->n_gpuid * sizeof(isl_id *));
+	for (i = 0; i< kernel->n_gpuid; i++)
+		kernel->gpuid[i] = isl_space_get_dim_id(space, isl_dim_param,i);
+	isl_space_free(space);
 
 	gen->private_access = NULL;
 	compute_shared_sched(gen);
