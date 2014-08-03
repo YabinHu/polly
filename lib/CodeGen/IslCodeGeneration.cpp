@@ -266,6 +266,7 @@ private:
   void createUser(__isl_take isl_ast_node *User);
   void createBlock(__isl_take isl_ast_node *Block);
 #ifdef GPU_CODEGEN
+  void createKernelSync();
   void createForGPGPU(__isl_take isl_ast_node *Node, int BackendType);
 #endif
 };
@@ -823,6 +824,8 @@ static void print_ast_node_as_c_format(__isl_keep isl_ast_node *Ast) {
   isl_printer_free(p);
 }
 
+void IslNodeBuilder::createKernelSync() { PTXGen->addKernelSynchronization(); }
+
 void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
                                     int BackendType) {
   assert(BackendType == 0 && "We only support PTX codegen currently.");
@@ -885,6 +888,7 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
     case ppcg_kernel_copy:
       break;
     case ppcg_kernel_sync:
+      createKernelSync();
       break;
     }
 
