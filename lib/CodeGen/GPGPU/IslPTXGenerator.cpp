@@ -1060,10 +1060,26 @@ static unsigned getArraySizeInBytes(const ArrayType *AT) {
   return Bytes;
 }
 
-void IslPTXGenerator::setLaunchingParameters(Value *GridSizeX,
-                                             Value *GridSizeY) {
-  GridDimX = GridSizeX;
-  GridDimY = GridSizeY;
+Value *IslPTXGenerator::getGridSize(int Pos) {
+  isl_ast_build *Context =
+      isl_ast_build_from_context(isl_set_copy(Kernel->context));
+  isl_multi_pw_aff *GSize = isl_multi_pw_aff_copy(Kernel->grid_size);
+  isl_pw_aff *Size = isl_multi_pw_aff_get_pw_aff(GSize, Pos);
+  isl_ast_expr *GridSize = isl_ast_build_expr_from_pw_aff(Context, Size);
+  Value *Res = ExprBuilder.create(GridSize);
+  isl_multi_pw_aff_free(GSize);
+  isl_ast_build_free(Context);
+
+  return Res;
+}
+
+void IslPTXGenerator::setLaunchingParameters() {
+  int Dim = isl_multi_pw_aff_dim(Kernel->grid_size, isl_dim_set);
+  assert((Dim >= 1 && Dim <= 2) && "CUDA grid size should be 1d or 2d.");
+  GridDimX = getGridSize(0);
+  GridDimY = nullptr;
+  if (Dim == 2)
+    GridDimY = getGridSize(1);
 }
 
 void IslPTXGenerator::finishGeneration(Function *F) {
@@ -1118,6 +1134,7 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   createCallStartTimerByCudaEvent(PtrCUStartEvent, PtrCUStopEvent);
 
   // Launch the GPU kernel.
+  setLaunchingParameters();
   createCallLaunchKernel(CUKernel, getCUDAGridDimX(), getCUDAGridDimY());
 
   // Copy the results back from the GPU to the host.
