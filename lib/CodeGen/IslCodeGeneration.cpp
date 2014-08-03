@@ -284,6 +284,7 @@ private:
   void createUser(__isl_take isl_ast_node *User);
   void createBlock(__isl_take isl_ast_node *Block);
 #ifdef GPU_CODEGEN
+  void createKernelCopy(struct ppcg_kernel_stmt *Stmt);
   void createKernelSync();
   void createForGPGPU(__isl_take isl_ast_node *Node, int BackendType);
 #endif
@@ -844,6 +845,21 @@ static void print_ast_node_as_c_format(__isl_keep isl_ast_node *Ast) {
 
 void IslNodeBuilder::createKernelSync() { PTXGen->addKernelSynchronization(); }
 
+void IslNodeBuilder::createKernelCopy(struct ppcg_kernel_stmt *KernelStmt) {
+  isl_ast_expr *LocalIndex = KernelStmt->u.c.local_index;
+  Value *LocalAddr = ExprBuilder.create(isl_ast_expr_copy(LocalIndex));
+  isl_ast_expr *Index = KernelStmt->u.c.index;
+  Value *GlobalAddr = ExprBuilder.create(isl_ast_expr_copy(Index));
+
+  if (KernelStmt->u.c.read) {
+    LoadInst *Load = Builder.CreateLoad(GlobalAddr, "shared.read");
+    Builder.CreateStore(Load, LocalAddr);
+  } else {
+    LoadInst *Load = Builder.CreateLoad(LocalAddr, "shared.write");
+    Builder.CreateStore(Load, GlobalAddr);
+  }
+}
+
 static void clearDomtree(Function *F, DominatorTree &DT) {
   DomTreeNode *N = DT.getNode(&F->getEntryBlock());
   std::vector<BasicBlock *> Nodes;
@@ -931,6 +947,7 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
       Indexes = KernelStmt->u.d.ref2expr;
       break;
     case ppcg_kernel_copy:
+      createKernelCopy(KernelStmt);
       isl_ast_expr_free(Expr);
       isl_ast_node_free(User);
       isl_id_free(Id);
