@@ -865,13 +865,32 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
 #ifdef GPU_CODEGEN
   if (GPGPU) {
     const char *Str = isl_id_get_name(Id);
-    isl_id_free(Id);
-    isl_ast_expr_free(Expr);
-
+    // We assume no other IDs called name "kernel".
     if (!strcmp(Str, "kernel")) {
       createForGPGPU(User, 0);
+
+      isl_ast_expr_free(Expr);
+      isl_id_free(Id);
+      return;
     }
 
+    isl_id *Anno = isl_ast_node_get_annotation(User);
+    struct ppcg_kernel_stmt *KernelStmt =
+        (struct ppcg_kernel_stmt *)isl_id_get_user(Anno);
+    isl_id_free(Anno);
+
+    switch (KernelStmt->type) {
+    case ppcg_kernel_domain:
+      break;
+    case ppcg_kernel_copy:
+      break;
+    case ppcg_kernel_sync:
+      break;
+    }
+
+    isl_ast_expr_free(Expr);
+    isl_ast_node_free(User);
+    isl_id_free(Id);
     return;
   }
 #endif
