@@ -1281,6 +1281,20 @@ void IslPTXGenerator::eraseUnusedFunctions(Function *SubFunction) {
   }
 }
 
+void IslPTXGenerator::eraseSharedMemoryBases() {
+  Module *M = getModule();
+
+  std::vector<GlobalVariable *> ToErase;
+  for (Module::global_iterator GI = M->global_begin(), GE = M->global_end();
+       GI != GE; ++GI)
+    if (GI->hasInternalLinkage() &&
+        GI->getType()->getPointerAddressSpace() != 0)
+      ToErase.push_back(GI);
+
+  for (auto GV : ToErase)
+    GV->eraseFromParent();
+}
+
 static unsigned getArraySizeInBytes(const ArrayType *AT) {
   unsigned Bytes = AT->getNumElements();
   if (const ArrayType *T = dyn_cast<ArrayType>(AT->getElementType()))
@@ -1410,6 +1424,9 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   // Erase the ptx kernel and device subfunctions and ptx intrinsics from
   // current module.
   eraseUnusedFunctions(F);
+
+  // Erase all the global variabes that used as shared memory base addresses.
+  eraseSharedMemoryBases();
 
   // Clear all the stored host iterator Values.
   clearHostIterators();

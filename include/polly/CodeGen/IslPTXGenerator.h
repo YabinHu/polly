@@ -261,6 +261,10 @@ private:
   ///
   /// @param SubFunction  A pointer to the device code function.
   void eraseUnusedFunctions(Function *SubFunction);
+
+  /// @brief Erase all the global variabes that used as shared memory base
+  /// addresses.
+  void eraseSharedMemoryBases();
 };
 } // end namespace polly
 
