@@ -176,6 +176,7 @@ private:
   ///                     the SubFunction.
   Value *getPTXKernelEntryName(Function *SubFunction);
 
+  void createLocalVariableDefinitions(IDToValueTy &IDToValue);
   void createCallInitDevice(Value *Context, Value *Device);
   void createCallGetPTXModule(Value *Buffer, Value *Module);
   void createCallGetPTXKernelEntry(Value *Entry, Value *Module, Value *Kernel);

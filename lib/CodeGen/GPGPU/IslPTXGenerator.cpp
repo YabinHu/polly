@@ -430,6 +430,12 @@ void IslPTXGenerator::startGeneration(struct ppcg_kernel *CurKernel,
   setHostIterators(IDToValue);
   createSubfunction(IDToValue, &SubFunction);
   *KernelBody = Builder.GetInsertPoint();
+
+  // Allocate shared memory we used
+  if (Options->use_shared_memory || Options->use_private_memory) {
+    createLocalVariableDefinitions(IDToValue);
+  }
+
   Builder.SetInsertPoint(PrevInsertPoint);
 }
 
@@ -1043,11 +1049,33 @@ Value *IslPTXGenerator::getOutputArraySizeInBytes() {
   return ConstantInt::get(getInt64Type(), OutputBytes);
 }
 
-static Module *extractPTXFunctionsFromModule(const Module *M,
+static Module *extractPTXFunctionsFromModule(Module *M,
                                              const StringRef &Triple) {
   llvm::ValueToValueMapTy VMap;
   Module *New = new Module("TempGPUModule", M->getContext());
   New->setTargetTriple(Triple::normalize(Triple));
+
+  // Loop over all the global variables and extract all that with a non-zero
+  // address space into GPU module.
+  for (Module::global_iterator GI = M->global_begin(), GE = M->global_end();
+       GI != GE; ++GI) {
+    if (GI->hasInternalLinkage()) {
+      PointerType *PTy = GI->getType();
+      if (PTy->getPointerAddressSpace() != 0) {
+        Type *ATy = PTy->getPointerElementType();
+        GlobalVariable *SharedVar =
+            new GlobalVariable(*New, ATy, /*isConstant=*/false,
+                               /*Linkage=*/GlobalValue::InternalLinkage,
+                               /*Initializer=*/0, GI->getName(), nullptr,
+                               GI->getThreadLocalMode(), 3);
+        SharedVar->setAlignment(GI->getAlignment());
+
+        // Constant Definitions
+        ConstantAggregateZero *Zero = ConstantAggregateZero::get(ATy);
+        SharedVar->setInitializer(Zero);
+      }
+    }
+  }
 
   // Loop over the functions in the module, making external functions as before
   for (Module::const_iterator I = M->begin(), E = M->end(); I != E; ++I) {
@@ -1120,6 +1148,63 @@ static bool createASMAsString(Module *New, const StringRef &Triple,
   }
 
   return true;
+}
+
+// We currently support only the following types.
+static Type *getLLVMTypeByName(std::string Name, const Module *Mod) {
+  LLVMContext &Context = Mod->getContext();
+
+  if (Name == "i32")
+    return Type::getInt32Ty(Context);
+  else if (Name == "i64")
+    return Type::getInt64Ty(Context);
+  else if (Name == "float")
+    return Type::getFloatTy(Context);
+  else if (Name == "double")
+    return Type::getDoubleTy(Context);
+  else if (Name == "i8")
+    return Type::getInt8Ty(Context);
+  else
+    return Type::getInt8PtrTy(Context);
+}
+
+void IslPTXGenerator::createLocalVariableDefinitions(IDToValueTy &IDToValue) {
+  Module *M = getModule();
+
+  for (int i = 0; i < Kernel->n_var; ++i) {
+    struct ppcg_kernel_var Var = Kernel->var[i];
+    Type *EleTy = getLLVMTypeByName(Var.array->type, M);
+    if (Var.type == ppcg_access_shared) {
+      isl_val *V0 = isl_vec_get_element_val(Var.size, 0);
+      long Bound = isl_val_get_num_si(V0);
+      isl_val_free(V0);
+      ArrayType *ATy = ArrayType::get(EleTy, Bound);
+      for (int j = 1; j < Var.array->n_index; ++j) {
+        isl_val *V = isl_vec_get_element_val(Var.size, j);
+        Bound = isl_val_get_num_si(V);
+        isl_val_free(V);
+        ATy = ArrayType::get(ATy, Bound);
+      }
+
+      GlobalVariable *SharedVar =
+          new GlobalVariable(*M, ATy, /*isConstant=*/false,
+                             /*Linkage=*/GlobalValue::InternalLinkage,
+                             /*Initializer=*/0, Var.name, nullptr,
+                             GlobalValue::ThreadLocalMode::NotThreadLocal, 3);
+      SharedVar->setAlignment(EleTy->getPrimitiveSizeInBits() / 8);
+
+      // Constant Definitions
+      ConstantAggregateZero *Zero = ConstantAggregateZero::get(ATy);
+      SharedVar->setInitializer(Zero);
+
+      // Update the IDToValue map
+      isl_ctx *Ctx = getIslCtx();
+      isl_id *Id = isl_id_alloc(Ctx, Var.name, nullptr);
+      IDToValue[Id] = SharedVar;
+
+      isl_id_free(Id);
+    }
+  }
 }
 
 Value *IslPTXGenerator::createPTXKernelFunction(Function *SubFunction) {
