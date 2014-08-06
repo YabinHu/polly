@@ -119,7 +119,7 @@ private:
   struct gpu_prog *Prog;
 
   /// @brief All the array base addresses in this Scop.
-  SetVector<Value *> BaseAddresses;
+  std::map<std::string, Value *> BaseAddresses;
 
   /// @brief All the host iterators that copy into the kernel.
   SetVector<Value *> HostIterators;

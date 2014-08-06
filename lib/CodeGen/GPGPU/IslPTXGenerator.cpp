@@ -30,6 +30,7 @@
 #include "polly/ScopInfo.h"
 #include "polly/CodeGen/IslAst.h"
 #include "polly/CodeGen/IslExprBuilder.h"
+#include "polly/Options.h"
 
 #include "isl/polynomial.h"
 #include "isl/union_set.h"
@@ -48,6 +49,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
@@ -65,6 +67,11 @@
 #include "schedule.h"
 
 using namespace polly;
+
+static cl::opt<bool> DumpGPUKernels("polly-dump-gpu-kernels",
+                                    cl::desc("Dump gpu kernel functions"),
+                                    cl::Hidden, cl::init(false), cl::ZeroOrMore,
+                                    cl::cat(PollyCategory));
 
 IslPTXGenerator::IslPTXGenerator(PollyIRBuilder &Builder,
                                  IslExprBuilder &ExprBuilder, Pass *P,
@@ -101,8 +108,11 @@ isl_ctx *IslPTXGenerator::getIslCtx() { return getPollyScop()->getIslCtx(); }
 void IslPTXGenerator::initializeBaseAddresses() {
   polly::Scop *S = getPollyScop();
   for (ScopStmt *Stmt : *S)
-    for (MemoryAccess *Acc : *Stmt)
-      BaseAddresses.insert(const_cast<Value *>(Acc->getBaseAddr()));
+    for (MemoryAccess *Acc : *Stmt) {
+      std::string ArrayName = Acc->getBaseName();
+      Value *Addr = Acc->getBaseAddr();
+      BaseAddresses.insert(std::make_pair(ArrayName, Addr));
+    }
 }
 
 static Type *getArrayElementType(Type *Ty) {
@@ -684,13 +694,7 @@ void IslPTXGenerator::createCallSetBlockShape(Value *Kernel, Value *BlockWidth,
 }
 
 Value *IslPTXGenerator::getBaseAddressByName(std::string Name) {
-  for (Value *Addr : BaseAddresses) {
-    std::string AddrName = "MemRef_" + Addr->getName().str();
-    if (!strcmp(Name.c_str(), AddrName.c_str()))
-      return Addr;
-  }
-
-  return nullptr;
+  return BaseAddresses[Name];
 }
 
 Value *IslPTXGenerator::getArraySize(struct gpu_array_info *Array,
@@ -1121,6 +1125,9 @@ static bool createASMAsString(Module *New, const StringRef &Triple,
 Value *IslPTXGenerator::createPTXKernelFunction(Function *SubFunction) {
   Module *M = getModule();
   Module *GPUModule = extractPTXFunctionsFromModule(M, GPUTriple);
+  if (DumpGPUKernels)
+    GPUModule->print(dbgs(), nullptr);
+
   std::string LLVMKernelStr;
   if (!createASMAsString(GPUModule, GPUTriple, "sm_20" /*MCPU*/,
                          "" /*Features*/, LLVMKernelStr)) {
