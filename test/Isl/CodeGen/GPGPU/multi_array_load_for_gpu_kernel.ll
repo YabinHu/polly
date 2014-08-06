@@ -86,6 +86,6 @@ attributes #0 = { nounwind uwtable "less-precise-fpmad"="false" "no-frame-pointe
 
 !0 = metadata !{metadata !"clang version 3.5.0 "}
 
-; CHECK: %14 = bitcast i8* %ptx.Array.MemRef_A to i32*
-; CHECK: %17 = getelementptr i32* %14, i64 %13
-; CHECK: store i32 %p_add, i32* %17
+; CHECK: %14 = bitcast i8 addrspace(1)* %ptx.Array.MemRef_A to i32 addrspace(1)*
+; CHECK: %polly.access.1 = getelementptr i32 addrspace(1)* %14, i64 %13
+; CHECK: store i32 %p_add, i32 addrspace(1)* %polly.access.1

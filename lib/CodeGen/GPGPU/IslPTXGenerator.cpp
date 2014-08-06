@@ -159,7 +159,7 @@ Function *IslPTXGenerator::createSubfunctionDefinition(
   std::vector<Type *> Arguments;
 
   for (int i = 0; i < NumMemAccs + NumVars + NumHostIters; i++)
-    Arguments.push_back(Builder.getInt8PtrTy());
+    Arguments.push_back(Builder.getInt8PtrTy(1));
 
   FunctionType *FT = FunctionType::get(Builder.getVoidTy(), Arguments, false);
   Function *FN = Function::Create(FT, Function::InternalLinkage,
