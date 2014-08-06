@@ -20,6 +20,7 @@ class Pass;
 class BasicBlock;
 }
 
+struct gpu_array_info;
 struct gpu_array_ref_group;
 struct gpu_prog;
 struct isl_ctx;
@@ -216,6 +217,8 @@ private:
 
   /// @brief Get the Value of the bytes of the output array.
   Value *getOutputArraySizeInBytes();
+
+  Value *getArraySize(struct gpu_array_info *Array, isl_set *Context);
 
   /// @brief Erase the ptx-related subfunctions and declarations.
   ///
