@@ -105,14 +105,23 @@ void IslPTXGenerator::initializeBaseAddresses() {
       BaseAddresses.insert(const_cast<Value *>(Acc->getBaseAddr()));
 }
 
+static Type *getArrayElementType(Type *Ty) {
+  ArrayType *AT;
+  while (AT = dyn_cast<ArrayType>(Ty)) {
+    Ty = AT->getElementType();
+  }
+
+  return Ty;
+}
+
 /* The arguments are placed in the following order:
  * - the arrays accessed by the kernel
  * - the parameters
  * - the host loop iterators
 */
-Function *IslPTXGenerator::createSubfunctionDefinition(int &NumMemAccs,
-                                                       int &NumVars,
-                                                       int &NumHostIters) {
+Function *IslPTXGenerator::createSubfunctionDefinition(
+    int &NumMemAccs, int &NumVars, int &NumHostIters,
+    SmallVector<isl_id *, 4> &ArrayIDs) {
   assert(Kernel && "Kernel should have been set correctly.");
 
   isl_space *Space;
@@ -120,9 +129,15 @@ Function *IslPTXGenerator::createSubfunctionDefinition(int &NumMemAccs,
     Space = isl_space_copy(Prog->array[i].space);
     isl_set *Arr = isl_union_set_extract_set(Kernel->arrays, Space);
     int Empty = isl_set_plain_is_empty(Arr);
+    if (!Empty) {
+      isl_id *Id = isl_set_get_tuple_id(Arr);
+      ArrayIDs.push_back(Id);
+      NumMemAccs++;
+
+      isl_id_free(Id);
+    }
+
     isl_set_free(Arr);
-    if (!Empty)
-      ++NumMemAccs;
   }
 
   Space = isl_union_set_get_space(Kernel->arrays);
@@ -217,7 +232,9 @@ void IslPTXGenerator::buildGPUKernel() {
 void IslPTXGenerator::createSubfunction(IDToValueTy &IDToValue,
                                         Function **Subfunction) {
   int NumMemAccs = 0, NumVars = 0, NumHostIters = 0;
-  Function *F = createSubfunctionDefinition(NumMemAccs, NumVars, NumHostIters);
+  SmallVector<isl_id *, 4> ArrayIDs;
+  Function *F = createSubfunctionDefinition(NumMemAccs, NumVars, NumHostIters,
+                                            ArrayIDs);
 
   Module *M = getModule();
   LLVMContext &Context = F->getContext();
@@ -316,8 +333,14 @@ void IslPTXGenerator::createSubfunction(IDToValueTy &IDToValue,
   int j = 0;
   for (Function::arg_iterator AI = F->arg_begin(); AI != F->arg_end(); ++AI) {
     if (j < NumMemAccs) {
-      ++j;
-      continue;
+      isl_id *Id = ArrayIDs[j];
+      Value *BaseAddr = (Value *)isl_id_get_user(Id);
+      Type *ArrayTy = BaseAddr->getType();
+      Type *EleTy =
+          getArrayElementType(cast<PointerType>(ArrayTy)->getElementType());
+      Type *PointerToEleTy = PointerType::get(EleTy, 1);
+      Value *Param = Builder.CreateBitCast(AI, PointerToEleTy);
+      IDToValue[Id] = Param;
     } else if (j < NumMemAccs + NumVars) {
       for (int i = 0; i < NumVars; ++i) {
         isl_id *Id = isl_space_get_dim_id(Space, isl_dim_param, i);
@@ -341,6 +364,7 @@ void IslPTXGenerator::createSubfunction(IDToValueTy &IDToValue,
     ++j;
   }
   isl_space_free(Space);
+  ArrayIDs.clear();
 
   Builder.CreateBr(BodyBB);
   Builder.SetInsertPoint(BodyBB);

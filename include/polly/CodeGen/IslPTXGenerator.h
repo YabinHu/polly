@@ -201,7 +201,8 @@ private:
 
   /// @brief Create the CUDA subfunction.
   ///
-  /// @param IDToValue    The map of isl_id to kernel subfunction arguments.
+  /// @param IDToValue    The map of isl_id to kernel base addresses, iterattors
+  ///                     and gpu ids.
   /// @param SubFunction  The newly created SubFunction is returned here.
   void createSubfunction(IDToValueTy &IDToValue, Function **Subfunction);
 
@@ -210,8 +211,10 @@ private:
   ///                     from host to device.
   /// @param NumVars      The number of parameters of this scop.
   /// @param NumHostIters The number of host loop iterators.
+  /// @param ArrayIDs     The isl_id array of the corresponding base addresses.
   Function *createSubfunctionDefinition(int &NumMemAccs, int &NumVars,
-                                        int &NumHostIters);
+                                        int &NumHostIters,
+                                        SmallVector<isl_id *, 4> &ArrayIDs);
 
   /// @brief Get the Value of CUDA block X-dimension.
   Value *getCUDABlockDimX();
