@@ -873,15 +873,6 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
 
   Function *FN = Builder.GetInsertBlock()->getParent();
 
-  // We should fill the IDToValue before this create(node) call.
-  for (int i = 0; i < Kernel->n_gpuid; ++i) {
-    isl_id *GPUId = isl_id_copy(Kernel->gpuid[i]);
-    const char *Name = isl_id_get_name(GPUId);
-    Value *IDValue = PTXGen->getValueOfGPUID(Name);
-    IDToValue[GPUId] = IDValue;
-    isl_id_free(GPUId);
-  }
-
   create(isl_ast_node_copy(Kernel->tree));
 
   // Set back the host IDToValue.
