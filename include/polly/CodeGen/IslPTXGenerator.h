@@ -121,6 +121,9 @@ private:
   /// @brief Information about the current GPU program.
   struct gpu_prog *Prog;
 
+  /// @brief All the array base addresses in this Scop.
+  SetVector<Value *> BaseAddresses;
+
   /// @brief Build the internal scop.
   void buildScop();
 
@@ -153,6 +156,8 @@ private:
   PointerType *getPtrGPUDevicePtrType(); // %struct.PollyGPUDevicePtrT *
   PointerType *getGPUFunctionPtrType();  // %struct.PollyGPUFunctionT *
   PointerType *getGPUEventPtrType();     // %struct.PollyGPUEventT *
+
+  void initializeBaseAddresses();
 
   /// @brief Create the kernel string containing LLVM IR.
   ///
@@ -218,6 +223,7 @@ private:
   /// @brief Get the Value of the bytes of the output array.
   Value *getOutputArraySizeInBytes();
 
+  Value *getBaseAddressByName(std::string Name);
   Value *getArraySize(struct gpu_array_info *Array, isl_set *Context);
 
   /// @brief Erase the ptx-related subfunctions and declarations.

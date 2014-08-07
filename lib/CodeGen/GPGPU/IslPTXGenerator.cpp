@@ -77,6 +77,7 @@ IslPTXGenerator::IslPTXGenerator(PollyIRBuilder &Builder,
   buildScop();
   buildGPUKernel();
   initializeGPUDataTypes();
+  initializeBaseAddresses();
 }
 
 IslPTXGenerator::~IslPTXGenerator() {
@@ -96,6 +97,13 @@ polly::Scop *IslPTXGenerator::getPollyScop() {
 }
 
 isl_ctx *IslPTXGenerator::getIslCtx() { return getPollyScop()->getIslCtx(); }
+
+void IslPTXGenerator::initializeBaseAddresses() {
+  polly::Scop *S = getPollyScop();
+  for (ScopStmt *Stmt : *S)
+    for (MemoryAccess *Acc : *Stmt)
+      BaseAddresses.insert(const_cast<Value *>(Acc->getBaseAddr()));
+}
 
 Function *IslPTXGenerator::createSubfunctionDefinition(int NumMemAccs,
                                                        int NumVars) {
