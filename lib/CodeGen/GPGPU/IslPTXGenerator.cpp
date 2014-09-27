@@ -1128,7 +1128,7 @@ static bool createASMAsString(Module *New, const StringRef &Triple,
   TargetLibraryInfo *TLI = new TargetLibraryInfo(TheTriple);
   PM.add(TLI);
 
-  PM.add(new DataLayoutPass(*Target.getDataLayout()));
+  PM.add(new DataLayoutPass());
   Target.addAnalysisPasses(PM);
 
   {
