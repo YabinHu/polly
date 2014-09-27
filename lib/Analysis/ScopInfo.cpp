@@ -363,6 +363,7 @@ static MemoryAccess::ReductionType getReductionType(const BinaryOperator *BinOp,
 //===----------------------------------------------------------------------===//
 
 MemoryAccess::~MemoryAccess() {
+  isl_id_free(RefId);
   isl_map_free(AccessRelation);
   isl_map_free(newAccessRelation);
 }
@@ -483,6 +484,8 @@ void MemoryAccess::assumeNoOutOfBound(const IRAccess &Access) {
   isl_space_free(Space);
 }
 
+int MemoryAccess::NumRef = 0;
+
 MemoryAccess::MemoryAccess(const IRAccess &Access, Instruction *AccInst,
                            ScopStmt *Statement, const ScopArrayInfo *SAI)
     : AccType(getMemoryAccessType(Access)), Statement(Statement), Inst(AccInst),
@@ -493,6 +496,10 @@ MemoryAccess::MemoryAccess(const IRAccess &Access, Instruction *AccInst,
   BaseName = getIslCompatibleName("MemRef_", getBaseAddr(), "");
 
   isl_id *BaseAddrId = SAI->getBasePtrId();
+
+  char RefIdName[50];
+  snprintf(RefIdName, sizeof(RefIdName), "__pet_ref_%d", NumRef++);
+  RefId = isl_id_alloc(Ctx, RefIdName, nullptr);
 
   if (!Access.isAffine()) {
     // We overapproximate non-affine accesses with a possible access to the
@@ -547,6 +554,10 @@ void MemoryAccess::realignParams() {
 
 const std::string MemoryAccess::getReductionOperatorStr() const {
   return MemoryAccess::getReductionOperatorStr(getReductionType());
+}
+
+__isl_give isl_id *MemoryAccess::getRefId() const {
+    return isl_id_copy(RefId);
 }
 
 raw_ostream &polly::operator<<(raw_ostream &OS,

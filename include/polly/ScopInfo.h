@@ -160,6 +160,9 @@ public:
     RT_BAND, ///< Bitwise And
   };
 
+  /// @brief The index number of a memory access.
+  static int NumRef;
+
 private:
   MemoryAccess(const MemoryAccess &) LLVM_DELETED_FUNCTION;
   const MemoryAccess &operator=(const MemoryAccess &) LLVM_DELETED_FUNCTION;
@@ -205,6 +208,9 @@ private:
 
   /// Updated access relation read from JSCOP file.
   isl_map *newAccessRelation;
+
+  /// A isl_id used to denote an access
+  isl_id *RefId;
 
   void assumeNoOutOfBound(const IRAccess &Access);
 
@@ -331,6 +337,9 @@ public:
 
   /// @brief Align the parameters in the access relation to the scop context
   void realignParams();
+
+  /// @brief Get ref_id.
+  __isl_give isl_id *getRefId() const;
 
   /// @brief Print the MemoryAccess.
   ///
