@@ -846,10 +846,12 @@ static void print_ast_node_as_c_format(__isl_keep isl_ast_node *Ast) {
 void IslNodeBuilder::createKernelSync() { PTXGen->addKernelSynchronization(); }
 
 void IslNodeBuilder::createKernelCopy(struct ppcg_kernel_stmt *KernelStmt) {
-  isl_ast_expr *LocalIndex = KernelStmt->u.c.local_index;
-  Value *LocalAddr = ExprBuilder.create(isl_ast_expr_copy(LocalIndex));
-  isl_ast_expr *Index = KernelStmt->u.c.index;
-  Value *GlobalAddr = ExprBuilder.create(isl_ast_expr_copy(Index));
+  isl_ast_expr *LocalIndex = isl_ast_expr_copy(KernelStmt->u.c.local_index);
+  LocalIndex = isl_ast_expr_address_of(LocalIndex);
+  Value *LocalAddr = ExprBuilder.create(LocalIndex);
+  isl_ast_expr *Index = isl_ast_expr_copy(KernelStmt->u.c.index);
+  Index = isl_ast_expr_address_of(Index);
+  Value *GlobalAddr = ExprBuilder.create(Index);
 
   if (KernelStmt->u.c.read) {
     LoadInst *Load = Builder.CreateLoad(GlobalAddr, "shared.read");

@@ -179,6 +179,7 @@ Value *BlockGenerator::generateLocationAccessed(const Instruction *Inst,
 #ifdef GPU_CODEGEN
   if (GPGPU) {
     isl_ast_expr *AccessExpr = isl_id_to_ast_expr_get(Indexes, MA.getRefId());
+    AccessExpr = isl_ast_expr_address_of(AccessExpr);
     return ExprBuilder->create(AccessExpr);
   } else {
     if (MA.hasNewAccessRelation())
