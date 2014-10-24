@@ -1126,7 +1126,12 @@ public:
     IslPTXGenerator *PTXGen = nullptr;
     struct ppcg_options *Options = nullptr;
     if (GPGPU) {
-      struct ppcg_debug_options DebugOptions = {0, 0, 0, 0};
+      struct ppcg_debug_options DebugOptions = {
+          0, /* dump schedule constraints */
+          0, /* dump schedule */
+          0, /* dump sizes */
+          0  /* dump ast node */
+      };
       Options = (struct ppcg_options *)malloc(sizeof(struct ppcg_options));
       Options->debug = &DebugOptions;
       Options->scale_tile_loops = false;
