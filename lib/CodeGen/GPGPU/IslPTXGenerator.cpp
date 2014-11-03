@@ -1203,6 +1203,25 @@ void IslPTXGenerator::createLocalVariableDefinitions(IDToValueTy &IDToValue) {
       IDToValue[Id] = SharedVar;
 
       isl_id_free(Id);
+    } else if (Var.type == ppcg_access_private) {
+      isl_val *V0 = isl_vec_get_element_val(Var.size, 0);
+      long Bound = isl_val_get_num_si(V0);
+      isl_val_free(V0);
+
+      ArrayType *ATy = ArrayType::get(EleTy, Bound);
+      for (int j = 1; j < Var.array->n_index; ++j) {
+        isl_val *V = isl_vec_get_element_val(Var.size, j);
+        Bound = isl_val_get_num_si(V);
+        isl_val_free(V);
+        ATy = ArrayType::get(ATy, Bound);
+      }
+
+      AllocaInst *PrivateVar = Builder.CreateAlloca(ATy, 0, "private_array");
+      isl_ctx *Ctx = getIslCtx();
+      isl_id *Id = isl_id_alloc(Ctx, Var.name, nullptr);
+      IDToValue[Id] = PrivateVar;
+
+      isl_id_free(Id);
     }
   }
 }
