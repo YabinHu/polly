@@ -92,7 +92,8 @@ typedef struct PollyGPUDevicePtrT PollyGPUDevicePtr;
 typedef struct PollyGPUEventT PollyGPUEvent;
 
 void polly_initDevice(PollyGPUContext **Context, PollyGPUDevice **Device);
-void polly_getPTXModule(void *PTXBuffer, PollyGPUModule **Module);
+void polly_getPTXModule(char *PTXBuffer, const char *KernelName,
+                        PollyGPUModule **Module, PollyGPUFunction **Kernel);
 void polly_getPTXKernelEntry(const char *KernelName, PollyGPUModule *Module,
                              PollyGPUFunction **Kernel);
 void polly_startTimerByCudaEvent(PollyGPUEvent **Start, PollyGPUEvent **Stop);

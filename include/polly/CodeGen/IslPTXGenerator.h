@@ -178,7 +178,8 @@ private:
 
   void createLocalVariableDefinitions(IDToValueTy &IDToValue);
   void createCallInitDevice(Value *Context, Value *Device);
-  void createCallGetPTXModule(Value *Buffer, Value *Module);
+  void createCallGetPTXModule(Value *Buffer, Value *Entry, Value *Module,
+                              Value *Kernel);
   void createCallGetPTXKernelEntry(Value *Entry, Value *Module, Value *Kernel);
   void createCallInitDevDataArray(Value *DevDataArray);
   void createCallAllocateMemoryForDevice(Value *DevDataArray, Value *DevData,

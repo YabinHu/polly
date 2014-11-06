@@ -535,7 +535,8 @@ void IslPTXGenerator::createCallInitDevice(Value *Context, Value *Device) {
   Builder.CreateCall2(F, Context, Device);
 }
 
-void IslPTXGenerator::createCallGetPTXModule(Value *Buffer, Value *Module) {
+void IslPTXGenerator::createCallGetPTXModule(Value *Buffer, Value *Entry,
+                                             Value *Module, Value *Kernel) {
   const char *Name = "polly_getPTXModule";
   llvm::Module *M = getModule();
   Function *F = M->getFunction(Name);
@@ -545,12 +546,14 @@ void IslPTXGenerator::createCallGetPTXModule(Value *Buffer, Value *Module) {
     GlobalValue::LinkageTypes Linkage = Function::ExternalLinkage;
     std::vector<Type *> Args;
     Args.push_back(getI8PtrType());
+    Args.push_back(getI8PtrType());
     Args.push_back(PointerType::getUnqual(getGPUModulePtrType()));
+    Args.push_back(PointerType::getUnqual(getGPUFunctionPtrType()));
     FunctionType *Ty = FunctionType::get(Builder.getVoidTy(), Args, false);
     F = Function::Create(Ty, Linkage, Name, M);
   }
 
-  Builder.CreateCall2(F, Buffer, Module);
+  Builder.CreateCall4(F, Buffer, Entry, Module, Kernel);
 }
 
 void IslPTXGenerator::createCallGetPTXKernelEntry(Value *Entry, Value *Module,
@@ -1385,10 +1388,8 @@ void IslPTXGenerator::finishGeneration(Function *F) {
   Value *PTXString = createPTXKernelFunction(F);
   assert(PTXString && "The generated ptx string should never be empty.");
   Value *PTXEntry = getPTXKernelEntryName(F);
-  createCallGetPTXModule(PTXString, PtrCUModule);
+  createCallGetPTXModule(PTXString, PTXEntry, PtrCUModule, PtrCUKernel);
   LoadInst *CUModule = Builder.CreateLoad(PtrCUModule, "cumodule");
-  createCallGetPTXKernelEntry(PTXEntry, CUModule, PtrCUKernel);
-
   LoadInst *CUKernel = Builder.CreateLoad(PtrCUKernel, "cukernel");
 
   // Allocate device data array.
