@@ -319,7 +319,7 @@ void polly_initDevice(PollyGPUContext **Context, PollyGPUDevice **Device) {
     fprintf(stdout, "Allocate memory for Polly GPU device failed.\n");
     exit(-1);
   }
-  CuDeviceGetFcnPtr(&((*Device)->Cuda), 0);
+  CuDeviceGetFcnPtr(&((*Device)->Cuda), DeviceID);
 
   /* Get compute capabilities and the device name. */
   CuDeviceComputeCapabilityFcnPtr(&Major, &Minor, (*Device)->Cuda);
