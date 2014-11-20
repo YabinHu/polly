@@ -41,6 +41,7 @@ class ScopStmt;
 class IslPTXGenerator {
 public:
   typedef DenseMap<const Value *, Value *> ValueToValueMapTy;
+  typedef std::map<isl_id *, Value *> IDToValueTy;
 
   IslPTXGenerator(PollyIRBuilder &Builder, IslExprBuilder &ExprBuilder, Pass *P,
                   const std::string &Triple, struct ppcg_options *&Opt);
@@ -59,10 +60,12 @@ public:
   /// @brief Create a GPGPU parallel loop.
   ///
   /// @param CurKernel    This is the current kernel.
+  /// @param IDToValue    This is the map from isl_id of an isl_ast object
+  //                      to its corresponding Value.
   /// @param KernelBody   A pointer to an iterator that is set to point to the
   ///                     body of the created loop. It should be used to insert
   ///                     instructions that form the actual loop body.
-  void startGeneration(struct ppcg_kernel *CurKernel,
+  void startGeneration(struct ppcg_kernel *CurKernel, IDToValueTy &IDToValue,
                        BasicBlock::iterator *KernelBody);
 
   /// @brief Execute the post-operations to build a GPGPU parallel loop.
@@ -198,14 +201,17 @@ private:
 
   /// @brief Create the CUDA subfunction.
   ///
+  /// @param IDToValue    The map of isl_id to kernel subfunction arguments.
   /// @param SubFunction  The newly created SubFunction is returned here.
-  void createSubfunction(Function **Subfunction);
+  void createSubfunction(IDToValueTy &IDToValue, Function **Subfunction);
 
   /// @brief Create the definition of the CUDA subfunction.
   /// @param NumMemAccs   The number of memory accesses which will be copied
-  //                      from host to device.
-  /// @param NumArgs      The number of parameters of this scop.
-  Function *createSubfunctionDefinition(int NumMemAccs, int NumArgs);
+  ///                     from host to device.
+  /// @param NumVars      The number of parameters of this scop.
+  /// @param NumHostIters The number of host loop iterators.
+  Function *createSubfunctionDefinition(int &NumMemAccs, int &NumVars,
+                                        int &NumHostIters);
 
   /// @brief Get the Value of CUDA block X-dimension.
   Value *getCUDABlockDimX();

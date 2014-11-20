@@ -105,13 +105,35 @@ void IslPTXGenerator::initializeBaseAddresses() {
       BaseAddresses.insert(const_cast<Value *>(Acc->getBaseAddr()));
 }
 
-Function *IslPTXGenerator::createSubfunctionDefinition(int NumMemAccs,
-                                                       int NumVars) {
+/* The arguments are placed in the following order:
+ * - the arrays accessed by the kernel
+ * - the parameters
+ * - the host loop iterators
+*/
+Function *IslPTXGenerator::createSubfunctionDefinition(int &NumMemAccs,
+                                                       int &NumVars,
+                                                       int &NumHostIters) {
+  assert(Kernel && "Kernel should have been set correctly.");
+
+  isl_space *Space;
+  for (int i = 0; i < Prog->n_array; ++i) {
+    Space = isl_space_copy(Prog->array[i].space);
+    isl_set *Arr = isl_union_set_extract_set(Kernel->arrays, Space);
+    int Empty = isl_set_plain_is_empty(Arr);
+    isl_set_free(Arr);
+    if (!Empty)
+      ++NumMemAccs;
+  }
+
+  Space = isl_union_set_get_space(Kernel->arrays);
+  NumVars = isl_space_dim(Space, isl_dim_param);
+  NumHostIters = isl_space_dim(Kernel->space, isl_dim_set);
+
   Module *M = getModule();
   Function *F = Builder.GetInsertBlock()->getParent();
   std::vector<Type *> Arguments;
 
-  for (int i = 0; i < NumMemAccs + NumVars; i++)
+  for (int i = 0; i < NumMemAccs + NumVars + NumHostIters; i++)
     Arguments.push_back(Builder.getInt8PtrTy());
 
   FunctionType *FT = FunctionType::get(Builder.getVoidTy(), Arguments, false);
@@ -124,15 +146,17 @@ Function *IslPTXGenerator::createSubfunctionDefinition(int NumMemAccs,
 
   int j = 0;
   for (Function::arg_iterator AI = FN->arg_begin(); AI != FN->arg_end(); ++AI) {
-    if (j < NumMemAccs) {
+    if (j < NumMemAccs)
       AI->setName("ptx.Array");
-      j++;
-      continue;
-    }
+    else if (j < NumMemAccs + NumVars)
+      AI->setName("ptx.Var");
+    else
+      AI->setName("ptx.HostIter");
 
-    AI->setName("ptx.Var");
+    j++;
   }
 
+  isl_space_free(Space);
   return FN;
 }
 
@@ -190,14 +214,10 @@ void IslPTXGenerator::buildGPUKernel() {
   Prog = ext.prog;
 }
 
-void IslPTXGenerator::createSubfunction(Function **Subfunction) {
-
-  int NumMemAccs, NumVars;
-  assert(Kernel && "Kernel should have been set correctly.");
-  NumMemAccs = Kernel->n_array;
-  NumVars = Kernel->n_var;
-
-  Function *F = createSubfunctionDefinition(NumMemAccs, NumVars);
+void IslPTXGenerator::createSubfunction(IDToValueTy &IDToValue,
+                                        Function **Subfunction) {
+  int NumMemAccs = 0, NumVars = 0, NumHostIters = 0;
+  Function *F = createSubfunctionDefinition(NumMemAccs, NumVars, NumHostIters);
 
   Module *M = getModule();
   LLVMContext &Context = F->getContext();
@@ -292,6 +312,36 @@ void IslPTXGenerator::createSubfunction(Function **Subfunction) {
     llvm_unreachable("Set thread id error");
   }
 
+  isl_space *Space = isl_union_set_get_space(Kernel->arrays);
+  int j = 0;
+  for (Function::arg_iterator AI = F->arg_begin(); AI != F->arg_end(); ++AI) {
+    if (j < NumMemAccs) {
+      ++j;
+      continue;
+    } else if (j < NumMemAccs + NumVars) {
+      for (int i = 0; i < NumVars; ++i) {
+        isl_id *Id = isl_space_get_dim_id(Space, isl_dim_param, i);
+        isl_id_free(Id);
+      }
+    } else {
+      // type = isl_options_get_ast_iterator_type(Prog->ctx);
+      for (int i = 0; i < NumHostIters; ++i) {
+        isl_id *Id = isl_space_get_dim_id(Kernel->space, isl_dim_set, i);
+        IDToValue.erase(IDToValue.find(Id));
+        const char *Name =
+            isl_space_get_dim_name(Kernel->space, isl_dim_set, i);
+        std::string HIName("device_");
+        HIName.append(Name);
+        LoadInst *HI = Builder.CreateLoad(AI, HIName);
+        IDToValue[Id] = HI;
+        isl_id_free(Id);
+      }
+    }
+
+    ++j;
+  }
+  isl_space_free(Space);
+
   Builder.CreateBr(BodyBB);
   Builder.SetInsertPoint(BodyBB);
 
@@ -328,11 +378,12 @@ Value *IslPTXGenerator::getValueOfGPUID(const char *Name) {
 }
 
 void IslPTXGenerator::startGeneration(struct ppcg_kernel *CurKernel,
+                                      IDToValueTy &IDToValue,
                                       BasicBlock::iterator *KernelBody) {
   Function *SubFunction;
   BasicBlock::iterator PrevInsertPoint = Builder.GetInsertPoint();
   Kernel = CurKernel;
-  createSubfunction(&SubFunction);
+  createSubfunction(IDToValue, &SubFunction);
   *KernelBody = Builder.GetInsertPoint();
   Builder.SetInsertPoint(PrevInsertPoint);
 }

@@ -840,9 +840,23 @@ Value *IslNodeBuilder::getGridSize(struct ppcg_kernel *Kernel, int Pos) {
   return Res;
 }
 
+static void clearDomtree(Function *F, DominatorTree &DT) {
+  DomTreeNode *N = DT.getNode(&F->getEntryBlock());
+  std::vector<BasicBlock *> Nodes;
+  for (po_iterator<DomTreeNode *> I = po_begin(N), E = po_end(N); I != E; ++I)
+    Nodes.push_back(I->getBlock());
+
+  for (std::vector<BasicBlock *>::iterator I = Nodes.begin(), E = Nodes.end();
+       I != E; ++I)
+    DT.eraseNode(*I);
+}
+
 void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
                                     int BackendType) {
   assert(BackendType == 0 && "We only support PTX codegen currently.");
+
+  // Backup the IDToValue.
+  IslExprBuilder::IDToValueTy IDToValueBefore = IDToValue;
 
   // Generate kernel code in the subfunction.
   isl_id *Id = isl_ast_node_get_annotation(Node);
@@ -853,7 +867,7 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
     print_ast_node_as_c_format(Kernel->tree);
 
   BasicBlock::iterator KernelBody;
-  PTXGen->startGeneration(Kernel, &KernelBody);
+  PTXGen->startGeneration(Kernel, IDToValue, &KernelBody);
   BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
   Builder.SetInsertPoint(KernelBody);
 
@@ -870,9 +884,13 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
 
   create(isl_ast_node_copy(Kernel->tree));
 
-  // Erase the id to value mapping for gpu ids.
-  for (int i = 0; i < Kernel->n_gpuid; ++i)
-    IDToValue.erase(Kernel->gpuid[i]);
+  // Set back the host IDToValue.
+  IDToValue.clear();
+  IDToValue = IDToValueBefore;
+
+  // Clear the dominator tree of the kernel function.
+  clearDomtree((*KernelBody).getParent()->getParent(),
+               P->getAnalysis<DominatorTreeWrapperPass>().getDomTree());
 
   // Set back the insert point to host end code.
   Builder.SetInsertPoint(AfterLoop);
