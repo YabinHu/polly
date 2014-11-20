@@ -886,7 +886,10 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
   isl_ast_expr *StmtExpr = isl_ast_expr_get_op_arg(Expr, 0);
   Id = isl_ast_expr_get_id(StmtExpr);
   isl_ast_expr_free(StmtExpr);
+
+
 #ifdef GPU_CODEGEN
+  isl_id_to_ast_expr *Indexes = nullptr;
   if (GPGPU) {
     const char *Str = isl_id_get_name(Id);
     // We assume no other IDs called name "kernel".
@@ -905,28 +908,39 @@ void IslNodeBuilder::createUser(__isl_take isl_ast_node *User) {
 
     switch (KernelStmt->type) {
     case ppcg_kernel_domain:
+      Stmt = KernelStmt->u.d.stmt->stmt;
+      Indexes = KernelStmt->u.d.ref2expr;
       break;
     case ppcg_kernel_copy:
-      break;
+      isl_ast_expr_free(Expr);
+      isl_ast_node_free(User);
+      isl_id_free(Id);
+      return;
     case ppcg_kernel_sync:
       createKernelSync();
-      break;
+      isl_ast_expr_free(Expr);
+      isl_ast_node_free(User);
+      isl_id_free(Id);
+      return;
     }
-
-    isl_ast_expr_free(Expr);
-    isl_ast_node_free(User);
-    isl_id_free(Id);
-    return;
-  }
-#endif
+  } else
+    Stmt = (ScopStmt *)isl_id_get_user(Id);
 
   LTS.insert(OutsideLoopIterations.begin(), OutsideLoopIterations.end());
 
+  createSubstitutions(Expr, Stmt, VMap, LTS);
+  BlockGenerator::generate(Builder, *Stmt, VMap, LTS, P, LI, SE,
+                           IslAstInfo::getBuild(User), &ExprBuilder, GPGPU,
+                           Indexes);
+#else
   Stmt = (ScopStmt *)isl_id_get_user(Id);
+
+  LTS.insert(OutsideLoopIterations.begin(), OutsideLoopIterations.end());
 
   createSubstitutions(Expr, Stmt, VMap, LTS);
   BlockGenerator::generate(Builder, *Stmt, VMap, LTS, P, LI, SE,
                            IslAstInfo::getBuild(User), &ExprBuilder);
+#endif
 
   isl_ast_node_free(User);
   isl_id_free(Id);
