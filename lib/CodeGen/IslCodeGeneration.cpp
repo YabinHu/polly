@@ -23,6 +23,7 @@
 #include "polly/CodeGen/BlockGenerators.h"
 #include "polly/CodeGen/CodeGeneration.h"
 #include "polly/CodeGen/IslAst.h"
+#include "polly/CodeGen/IslPTXGenerator.h"
 #include "polly/CodeGen/LoopGenerators.h"
 #include "polly/CodeGen/Utils.h"
 #include "polly/Dependences.h"
@@ -80,13 +81,21 @@ public:
       : S(S), Builder(Builder), Annotator(Annotator),
         Rewriter(new SCEVExpander(SE, "polly")),
         ExprBuilder(Builder, IDToValue, *Rewriter), P(P), DL(DL), LI(LI),
+#ifdef GPU_CODEGEN
+        SE(SE), DT(DT), PTXGen(nullptr) {}
+#else
         SE(SE), DT(DT) {}
+#endif
 
   ~IslNodeBuilder() { delete Rewriter; }
 
   void addParameters(__isl_take isl_set *Context);
   void create(__isl_take isl_ast_node *Node);
   IslExprBuilder &getExprBuilder() { return ExprBuilder; }
+#ifdef GPU_CODEGEN
+  IslPTXGenerator *getPTXGenerator() { return PTXGen; }
+  void setPTXGenerator(IslPTXGenerator *Gen) { PTXGen = Gen; }
+#endif
 
 private:
   Scop &S;
@@ -102,6 +111,9 @@ private:
   LoopInfo &LI;
   ScalarEvolution &SE;
   DominatorTree &DT;
+#ifdef GPU_CODEGEN
+  IslPTXGenerator *PTXGen;
+#endif
 
   /// @brief The current iteration of out-of-scop loops
   ///
