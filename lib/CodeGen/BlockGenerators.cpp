@@ -52,12 +52,22 @@ bool polly::canSynthesize(const Instruction *I, const llvm::LoopInfo *LI,
   return false;
 }
 
+#ifndef GPU_CODEGEN
 BlockGenerator::BlockGenerator(PollyIRBuilder &B, ScopStmt &Stmt, Pass *P,
                                LoopInfo &LI, ScalarEvolution &SE,
                                isl_ast_build *Build,
                                IslExprBuilder *ExprBuilder)
     : Builder(B), Statement(Stmt), P(P), LI(LI), SE(SE), Build(Build),
       ExprBuilder(ExprBuilder) {}
+#else
+BlockGenerator::BlockGenerator(PollyIRBuilder &B, ScopStmt &Stmt, Pass *P,
+                               LoopInfo &LI, ScalarEvolution &SE,
+                               isl_ast_build *Build,
+                               IslExprBuilder *ExprBuilder, bool GPGPU,
+                               isl_id_to_ast_expr *Indexes)
+    : Builder(B), Statement(Stmt), P(P), LI(LI), SE(SE), Build(Build),
+      ExprBuilder(ExprBuilder), GPGPU(GPGPU), Indexes(Indexes) {}
+#endif
 
 Value *BlockGenerator::getNewValue(const Value *Old, ValueMapT &BBMap,
                                    ValueMapT &GlobalMap, LoopToScevMapT &LTS,
@@ -166,11 +176,24 @@ Value *BlockGenerator::generateLocationAccessed(const Instruction *Inst,
   const MemoryAccess &MA = Statement.getAccessFor(Inst);
 
   Value *NewPointer;
+#ifdef GPU_CODEGEN
+  if (GPGPU) {
+    isl_ast_expr *AccessExpr = isl_id_to_ast_expr_get(Indexes, MA.getRefId());
+    return ExprBuilder->create(AccessExpr);
+  } else {
+    if (MA.hasNewAccessRelation())
+      NewPointer = getNewAccessOperand(MA);
+    else
+      NewPointer =
+          getNewValue(Pointer, BBMap, GlobalMap, LTS, getLoopForInst(Inst));
+  }
+#else
   if (MA.hasNewAccessRelation())
     NewPointer = getNewAccessOperand(MA);
   else
     NewPointer =
         getNewValue(Pointer, BBMap, GlobalMap, LTS, getLoopForInst(Inst));
+#endif
 
   return NewPointer;
 }
@@ -255,8 +278,14 @@ VectorBlockGenerator::VectorBlockGenerator(
     std::vector<LoopToScevMapT> &VLTS, ScopStmt &Stmt,
     __isl_keep isl_map *Schedule, Pass *P, LoopInfo &LI, ScalarEvolution &SE,
     __isl_keep isl_ast_build *Build, IslExprBuilder *ExprBuilder)
+#ifndef GPU_CODEGEN
     : BlockGenerator(B, Stmt, P, LI, SE, Build, ExprBuilder),
       GlobalMaps(GlobalMaps), VLTS(VLTS), Schedule(Schedule) {
+#else
+    : BlockGenerator(B, Stmt, P, LI, SE, Build, ExprBuilder, false, nullptr),
+      GlobalMaps(GlobalMaps), VLTS(VLTS), Schedule(Schedule) {
+#endif
+
   assert(GlobalMaps.size() > 1 && "Only one vector lane found");
   assert(Schedule && "No statement domain provided");
 }

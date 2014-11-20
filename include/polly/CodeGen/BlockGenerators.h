@@ -16,6 +16,7 @@
 #ifndef POLLY_BLOCK_GENERATORS_H
 #define POLLY_BLOCK_GENERATORS_H
 
+#include "polly/Config/config.h"
 #include "polly/CodeGen/IRBuilder.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
@@ -31,6 +32,10 @@ class Pass;
 class Region;
 class ScalarEvolution;
 }
+
+#ifdef GPU_CODEGEN
+struct isl_id_to_ast_expr;
+#endif
 
 namespace polly {
 using namespace llvm;
@@ -76,6 +81,7 @@ public:
   /// @param SE        The scalar evolution info for the current function
   /// @param Build       The AST build with the new schedule.
   /// @param ExprBuilder An expression builder to generate new access functions.
+#ifndef GPU_CODEGEN
   static void generate(PollyIRBuilder &Builder, ScopStmt &Stmt,
                        ValueMapT &GlobalMap, LoopToScevMapT &LTS, Pass *P,
                        LoopInfo &LI, ScalarEvolution &SE,
@@ -84,6 +90,19 @@ public:
     BlockGenerator Generator(Builder, Stmt, P, LI, SE, Build, ExprBuilder);
     Generator.copyBB(GlobalMap, LTS);
   }
+#else
+  static void generate(PollyIRBuilder &Builder, ScopStmt &Stmt,
+                       ValueMapT &GlobalMap, LoopToScevMapT &LTS, Pass *P,
+                       LoopInfo &LI, ScalarEvolution &SE,
+                       __isl_keep isl_ast_build *Build = nullptr,
+                       IslExprBuilder *ExprBuilder = nullptr,
+                       bool GPGPU = false,
+                       __isl_keep isl_id_to_ast_expr *Indexes = nullptr) {
+    BlockGenerator Generator(Builder, Stmt, P, LI, SE, Build, ExprBuilder,
+                             GPGPU, Indexes);
+    Generator.copyBB(GlobalMap, LTS);
+  }
+#endif
 
 protected:
   PollyIRBuilder &Builder;
@@ -93,10 +112,21 @@ protected:
   ScalarEvolution &SE;
   isl_ast_build *Build;
   IslExprBuilder *ExprBuilder;
+#ifdef GPU_CODEGEN
+  bool GPGPU;
+  isl_id_to_ast_expr *Indexes;
+#endif
 
+#ifndef GPU_CODEGEN
   BlockGenerator(PollyIRBuilder &B, ScopStmt &Stmt, Pass *P, LoopInfo &LI,
                  ScalarEvolution &SE, __isl_keep isl_ast_build *Build,
                  IslExprBuilder *ExprBuilder);
+#else
+  BlockGenerator(PollyIRBuilder &B, ScopStmt &Stmt, Pass *P, LoopInfo &LI,
+                 ScalarEvolution &SE, __isl_keep isl_ast_build *Build,
+                 IslExprBuilder *ExprBuilder, bool GPGPU,
+                 __isl_keep isl_id_to_ast_expr *Indexes);
+#endif
 
   /// @brief Get the new version of a value.
   ///
