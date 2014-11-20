@@ -35,6 +35,8 @@
 #include "polly/Support/SCEVValidator.h"
 #include "polly/TempScopInfo.h"
 
+#include "GPGPU/ppcg_options.h"
+
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/LoopInfo.h"
@@ -970,7 +972,54 @@ public:
     BasicBlock *StartBlock = executeScopConditionally(S, this, RTC);
     Builder.SetInsertPoint(StartBlock->begin());
 
-    NodeBuilder.create(AI->getAst());
+    isl_ast_node *Ast = nullptr;
+#ifndef GPU_CODEGEN
+    Ast = AI->getAst();
+#else
+    if (!GPGPU)
+      Ast = AI->getAst();
+
+    IslPTXGenerator *PTXGen = nullptr;
+    struct ppcg_options *Options = nullptr;
+    if (GPGPU) {
+      struct ppcg_debug_options DebugOptions = {0, 0, 0, 0};
+      Options = (struct ppcg_options *)malloc(sizeof(struct ppcg_options));
+      Options->debug = &DebugOptions;
+      Options->scale_tile_loops = false;
+      Options->wrap = false;
+      Options->ctx = nullptr;
+      Options->sizes = nullptr;
+      Options->tile_size = 32;
+      Options->use_private_memory = 0;
+      Options->use_shared_memory = 0;
+      Options->max_shared_memory = 8192 * 6;
+      Options->target = 1; /* CUDA/PTX codegen */
+      Options->openmp = 0;
+      Options->linearize_device_arrays = 0;
+      Options->live_range_reordering = 0;
+      Options->opencl_compiler_options = nullptr;
+      Options->opencl_use_gpu = 0;
+      errs() << "hello ptx code generator.\n";
+
+      PTXGen = new IslPTXGenerator(Builder, NodeBuilder.getExprBuilder(), this,
+                                   GPUTriple, Options);
+      Ast = PTXGen->getOutputAST();
+      if (PTXGen->getOptions()->debug->dump_ast_node)
+        print_ast_node_as_c_format(Ast);
+    }
+
+    NodeBuilder.setPTXGenerator(PTXGen);
+#endif
+
+    NodeBuilder.create(Ast);
+
+#ifdef GPU_CODEGEN
+    if (PTXGen)
+      delete PTXGen;
+    if (Options)
+      free(Options);
+#endif
+
     return true;
   }
 
