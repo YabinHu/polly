@@ -766,13 +766,6 @@ extractArraysInfo(polly::Scop *S,
       return NULL;
     Arrays[J] = Arr;
 
-    const GlobalVariable *GV = dyn_cast<const GlobalVariable>(BaseAddr);
-    ArrayType *ATy = dyn_cast<ArrayType>(GV->getType()->getElementType());
-    ArrayType *PTy = ATy;
-    ArrayType *EleTy;
-    while (EleTy = dyn_cast<ArrayType>(PTy->getElementType()))
-      PTy = EleTy;
-
     const ScopArrayInfo *ArrInfo =
         S->getScopArrayInfo(const_cast<Value *>(BaseAddr));
     unsigned NumDims = ArrInfo->getNumberOfDimensions();
@@ -786,18 +779,27 @@ extractArraysInfo(polly::Scop *S,
     // Arrays[J] = set_upper_bounds(Ctx, Arrays[J], ATy, 0);
     Arrays[J]->value_bounds = NULL;
 
+    Type *EleTy = BaseAddr->getType()->getPointerElementType();
+    const GlobalVariable *GV = dyn_cast<const GlobalVariable>(BaseAddr);
+    if (GV) {
+      ArrayType *ATy = dyn_cast<ArrayType>(GV->getType()->getElementType());
+      EleTy = ATy;
+      while (EleTy->isArrayTy())
+        EleTy = cast<ArrayType>(EleTy)->getElementType();
+    }
+
     std::string TypeName;
     raw_string_ostream OS(TypeName);
-    PTy->getElementType()->print(OS);
+    EleTy->print(OS);
     TypeName = OS.str();
     Arrays[J]->element_type = strdup(TypeName.c_str());
     Arrays[J]->element_is_record = 0;
-    Arrays[J]->element_size =
-        PTy->getElementType()->getPrimitiveSizeInBits() / 8;
+    Arrays[J]->element_size = EleTy->getPrimitiveSizeInBits() / 8;
     Arrays[J]->live_out = 0;
     Arrays[J]->uniquely_defined = 0;
     Arrays[J]->declared = 0;
     Arrays[J]->exposed = 0;
+
     J++;
   }
 
