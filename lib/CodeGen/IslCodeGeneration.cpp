@@ -894,7 +894,7 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
     print_ast_node_as_c_format(Kernel->tree);
 
   BasicBlock::iterator KernelBody;
-  PTXGen->startGeneration(Kernel, IDToValue, &KernelBody);
+  PTXGen->startGeneration(Kernel, IDToValue, IDToSAI, &KernelBody);
   BasicBlock::iterator AfterLoop = Builder.GetInsertPoint();
   Builder.SetInsertPoint(KernelBody);
 
@@ -905,6 +905,7 @@ void IslNodeBuilder::createForGPGPU(__isl_take isl_ast_node *Node,
   // Set back the host IDToValue.
   IDToValue.clear();
   IDToValue = IDToValueBefore;
+  IDToSAI.clear();
 
   // Clear the dominator tree of the kernel function.
   clearDomtree((*KernelBody).getParent()->getParent(),

@@ -37,12 +37,14 @@ using namespace llvm;
 
 class IslExprBuilder;
 class Scop;
+class ScopArrayInfo;
 class ScopStmt;
 
 class IslPTXGenerator {
 public:
   typedef DenseMap<const Value *, Value *> ValueToValueMapTy;
   typedef llvm::MapVector<isl_id *, llvm::Value *> IDToValueTy;
+  typedef llvm::MapVector<isl_id *, const ScopArrayInfo *> IDToScopArrayInfoTy;
 
   IslPTXGenerator(PollyIRBuilder &Builder, IslExprBuilder &ExprBuilder, Pass *P,
                   const std::string &Triple, struct ppcg_options *&Opt);
@@ -69,6 +71,7 @@ public:
   ///                     body of the created loop. It should be used to insert
   ///                     instructions that form the actual loop body.
   void startGeneration(struct ppcg_kernel *CurKernel, IDToValueTy &IDToValue,
+                       IDToScopArrayInfoTy &IDToSAI,
                        BasicBlock::iterator *KernelBody);
 
   /// @brief Execute the post-operations to build a GPGPU parallel loop.
@@ -176,7 +179,8 @@ private:
   ///                     the SubFunction.
   Value *getPTXKernelEntryName(Function *SubFunction);
 
-  void createLocalVariableDefinitions(IDToValueTy &IDToValue);
+  void createLocalVariableDefinitions(IDToValueTy &IDToValue,
+                                      IDToScopArrayInfoTy &IDToSAI);
   void createCallInitDevice(Value *Context, Value *Device);
   void createCallGetPTXModule(Value *Buffer, Value *Entry, Value *Module,
                               Value *Kernel);
@@ -218,7 +222,8 @@ private:
   /// @param IDToValue    The map of isl_id to kernel base addresses, iterattors
   ///                     and gpu ids.
   /// @param SubFunction  The newly created SubFunction is returned here.
-  void createSubfunction(IDToValueTy &IDToValue, Function **Subfunction);
+  void createSubfunction(IDToValueTy &IDToValue, IDToScopArrayInfoTy &IDToSAI,
+                         Function **Subfunction);
 
   /// @brief Create the definition of the CUDA subfunction.
   /// @param NumMemAccs   The number of memory accesses which will be copied

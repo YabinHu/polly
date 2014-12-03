@@ -124,6 +124,18 @@ static Type *getArrayElementType(Type *Ty) {
   return Ty;
 }
 
+static unsigned getSizeOfArray(Type *Ty) {
+  ArrayType *AT;
+  unsigned Size = 1;
+
+  while (AT = dyn_cast<ArrayType>(Ty)) {
+    Size *= AT->getNumElements();
+    Ty = AT->getElementType();
+  }
+
+  return Size;
+}
+
 /* The arguments are placed in the following order:
  * - the arrays accessed by the kernel
  * - the parameters
@@ -248,6 +260,7 @@ void IslPTXGenerator::buildGPUKernel() {
 }
 
 void IslPTXGenerator::createSubfunction(IDToValueTy &IDToValue,
+                                        IDToScopArrayInfoTy &IDToSAI,
                                         Function **Subfunction) {
   int NumMemAccs = 0, NumVars = 0, NumHostIters = 0;
   SmallVector<isl_id *, 4> ArrayIDs;
@@ -372,13 +385,22 @@ void IslPTXGenerator::createSubfunction(IDToValueTy &IDToValue,
   for (Function::arg_iterator AI = F->arg_begin(); AI != F->arg_end(); ++AI) {
     if (j < NumMemAccs) {
       isl_id *Id = ArrayIDs[j];
-      Value *BaseAddr = (Value *)isl_id_get_user(Id);
-      Type *ArrayTy = BaseAddr->getType();
-      Type *EleTy =
-          getArrayElementType(cast<PointerType>(ArrayTy)->getElementType());
+      const ScopArrayInfo *SAI = ScopArrayInfo::getFromId(isl_id_copy(Id));
+      Value *BaseAddr = SAI->getBasePtr();
+      Type *PtArrayTy = BaseAddr->getType();
+      Type *ArrayTy = cast<PointerType>(PtArrayTy)->getElementType();
+      Type *EleTy = getArrayElementType(ArrayTy);
       Type *PointerToEleTy = PointerType::get(EleTy, 1);
       Value *Param = Builder.CreateBitCast(AI, PointerToEleTy);
       IDToValue[Id] = Param;
+
+      SmallVector<const SCEV *, 4> Sizes;
+      unsigned Size = getSizeOfArray(ArrayTy);
+      polly::Scop *S = getPollyScop();
+      Sizes.push_back(S->getSE()->getConstant(getInt64Type(), Size));
+      const ScopArrayInfo *SAIRep =
+          S->getOrCreateScopArrayInfo(Param, PointerToEleTy, Sizes);
+      IDToSAI[Id] = SAIRep;
     } else if (j < NumMemAccs + NumVars) {
       for (int i = 0; i < NumVars; ++i) {
         isl_id *Id = isl_space_get_dim_id(Space, isl_dim_param, i);
@@ -423,17 +445,18 @@ void IslPTXGenerator::createSubfunction(IDToValueTy &IDToValue,
 
 void IslPTXGenerator::startGeneration(struct ppcg_kernel *CurKernel,
                                       IDToValueTy &IDToValue,
+                                      IDToScopArrayInfoTy &IDToSAI,
                                       BasicBlock::iterator *KernelBody) {
   Function *SubFunction;
   BasicBlock::iterator PrevInsertPoint = Builder.GetInsertPoint();
   Kernel = CurKernel;
   setHostIterators(IDToValue);
-  createSubfunction(IDToValue, &SubFunction);
+  createSubfunction(IDToValue, IDToSAI, &SubFunction);
   *KernelBody = Builder.GetInsertPoint();
 
   // Allocate shared memory we used
   if (Options->use_shared_memory || Options->use_private_memory) {
-    createLocalVariableDefinitions(IDToValue);
+    createLocalVariableDefinitions(IDToValue, IDToSAI);
   }
 
   Builder.SetInsertPoint(PrevInsertPoint);
@@ -1171,24 +1194,36 @@ static Type *getLLVMTypeByName(std::string Name, const Module *Mod) {
     return Type::getInt8PtrTy(Context);
 }
 
-void IslPTXGenerator::createLocalVariableDefinitions(IDToValueTy &IDToValue) {
+void IslPTXGenerator::createLocalVariableDefinitions(
+    IDToValueTy &IDToValue, IDToScopArrayInfoTy &IDToSAI) {
   Module *M = getModule();
 
   for (int i = 0; i < Kernel->n_var; ++i) {
     struct ppcg_kernel_var Var = Kernel->var[i];
     Type *EleTy = getLLVMTypeByName(Var.array->type, M);
-    if (Var.type == ppcg_access_shared) {
-      isl_val *V0 = isl_vec_get_element_val(Var.size, 0);
-      long Bound = isl_val_get_num_si(V0);
-      isl_val_free(V0);
-      ArrayType *ATy = ArrayType::get(EleTy, Bound);
-      for (int j = 1; j < Var.array->n_index; ++j) {
-        isl_val *V = isl_vec_get_element_val(Var.size, j);
-        Bound = isl_val_get_num_si(V);
-        isl_val_free(V);
-        ATy = ArrayType::get(ATy, Bound);
-      }
+    polly::Scop *S = getPollyScop();
+    SmallVector<const SCEV *, 4> Sizes;
 
+    isl_val *V0 = isl_vec_get_element_val(Var.size, 0);
+    long Bound = isl_val_get_num_si(V0);
+    isl_val_free(V0);
+    Sizes.push_back(S->getSE()->getConstant(getInt64Type(), Bound));
+
+    ArrayType *ATy = ArrayType::get(EleTy, Bound);
+    for (int j = 1; j < Var.array->n_index; ++j) {
+      isl_val *V = isl_vec_get_element_val(Var.size, j);
+      Bound = isl_val_get_num_si(V);
+      isl_val_free(V);
+      Sizes.push_back(S->getSE()->getConstant(getInt64Type(), Bound));
+      ATy = ArrayType::get(ATy, Bound);
+    }
+
+    // Create isl_id for this user kernel array.
+    isl_ctx *Ctx = getIslCtx();
+    isl_id *Id = isl_id_alloc(Ctx, Var.name, nullptr);
+
+    const ScopArrayInfo *SAI = nullptr;
+    if (Var.type == ppcg_access_shared) {
       GlobalVariable *SharedVar =
           new GlobalVariable(*M, ATy, /*isConstant=*/false,
                              /*Linkage=*/GlobalValue::InternalLinkage,
@@ -1201,31 +1236,22 @@ void IslPTXGenerator::createLocalVariableDefinitions(IDToValueTy &IDToValue) {
       SharedVar->setInitializer(Zero);
 
       // Update the IDToValue map
-      isl_ctx *Ctx = getIslCtx();
-      isl_id *Id = isl_id_alloc(Ctx, Var.name, nullptr);
       IDToValue[Id] = SharedVar;
 
-      isl_id_free(Id);
+      // Create ScopArrayInfo for this user kernel array.
+      Type *AccessTy = EleTy->getPointerTo(3);
+      SAI = S->getOrCreateScopArrayInfo(SharedVar, AccessTy, Sizes);
     } else if (Var.type == ppcg_access_private) {
-      isl_val *V0 = isl_vec_get_element_val(Var.size, 0);
-      long Bound = isl_val_get_num_si(V0);
-      isl_val_free(V0);
-
-      ArrayType *ATy = ArrayType::get(EleTy, Bound);
-      for (int j = 1; j < Var.array->n_index; ++j) {
-        isl_val *V = isl_vec_get_element_val(Var.size, j);
-        Bound = isl_val_get_num_si(V);
-        isl_val_free(V);
-        ATy = ArrayType::get(ATy, Bound);
-      }
-
       AllocaInst *PrivateVar = Builder.CreateAlloca(ATy, 0, "private_array");
-      isl_ctx *Ctx = getIslCtx();
-      isl_id *Id = isl_id_alloc(Ctx, Var.name, nullptr);
       IDToValue[Id] = PrivateVar;
 
-      isl_id_free(Id);
+      // Create ScopArrayInfo for this user kernel array.
+      Type *AccessTy = EleTy->getPointerTo();
+      SAI = S->getOrCreateScopArrayInfo(PrivateVar, AccessTy, Sizes);
     }
+    IDToSAI[Id] = SAI;
+
+    isl_id_free(Id);
   }
 }
 
