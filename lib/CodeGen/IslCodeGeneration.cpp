@@ -102,11 +102,11 @@ public:
                  DominatorTree &DT, Scop &S)
       : S(S), Builder(Builder), Annotator(Annotator),
         Rewriter(new SCEVExpander(SE, "polly")),
-        ExprBuilder(Builder, IDToValue, *Rewriter), P(P), DL(DL), LI(LI),
+        ExprBuilder(Builder, IDToValue, *Rewriter, IDToSAI), P(P), DL(DL),
 #ifdef GPU_CODEGEN
-        SE(SE), DT(DT), PTXGen(nullptr) {}
+        LI(LI), SE(SE), DT(DT), PTXGen(nullptr) {}
 #else
-        SE(SE), DT(DT) {}
+        LI(LI), SE(SE), DT(DT) {}
 #endif
 
   ~IslNodeBuilder() { delete Rewriter; }
@@ -147,6 +147,11 @@ private:
   // on, the only isl_ids that are stored here are the newly calculated loop
   // ivs.
   IslExprBuilder::IDToValueTy IDToValue;
+
+  // This maps an isl_id* to the ScopArrayInfo* it has in the generated program.
+  // The isl_ids that are stored here are used to do the value replacement of
+  // user array base.
+  IslExprBuilder::IDToScopArrayInfoTy IDToSAI;
 
   /// Generate code for a given SCEV*
   ///

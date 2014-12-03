@@ -109,7 +109,12 @@ Value *IslExprBuilder::createAccessAddress(isl_ast_expr *Expr) {
   BaseId = isl_ast_expr_get_id(BaseExpr);
   isl_ast_expr_free(BaseExpr);
 
-  const ScopArrayInfo *SAI = ScopArrayInfo::getFromId(BaseId);
+  const ScopArrayInfo *SAI = IDToSAI[BaseId];
+  if (!SAI)
+    SAI = ScopArrayInfo::getFromId(BaseId);
+  else
+    isl_id_free(BaseId);
+  assert(SAI && "We should have created the ScopArrayInfo for this isl_id.");
   Base = SAI->getBasePtr();
   assert(Base->getType()->isPointerTy() && "Access base should be a pointer");
   const Twine &BaseName = Base->getName();

@@ -12,6 +12,7 @@
 #ifndef POLLY_ISL_EXPR_BUILDER_H
 #define POLLY_ISL_EXPR_BUILDER_H
 
+#include "polly/ScopInfo.h"
 #include "polly/CodeGen/IRBuilder.h"
 
 #include "llvm/ADT/MapVector.h"
@@ -83,6 +84,9 @@ public:
   /// @brief A map from isl_ids to llvm::Values.
   typedef llvm::MapVector<isl_id *, llvm::Value *> IDToValueTy;
 
+  /// @brief A map from isl_ids to llvm::Values.
+  typedef llvm::MapVector<isl_id *, const ScopArrayInfo *> IDToScopArrayInfoTy;
+
   /// @brief Construct an IslExprBuilder.
   ///
   /// @param Builder The IRBuilder used to construct the isl_ast_expr[ession].
@@ -96,8 +100,10 @@ public:
   /// @param Expander  A SCEVExpander to create the indices for multi
   ///                  dimensional accesses.
   IslExprBuilder(PollyIRBuilder &Builder, IDToValueTy &IDToValue,
-                 llvm::SCEVExpander &Expander)
-      : Builder(Builder), IDToValue(IDToValue), Expander(Expander) {}
+                 llvm::SCEVExpander &Expander,
+                 IDToScopArrayInfoTy &IDToSAI)
+      : Builder(Builder), IDToValue(IDToValue), Expander(Expander),
+        IDToSAI(IDToSAI) {}
 
   /// @brief Create LLVM-IR for an isl_ast_expr[ession].
   ///
@@ -129,6 +135,8 @@ private:
 
   /// @brief A SCEVExpander to translate dimension sizes to llvm values.
   llvm::SCEVExpander &Expander;
+
+  IDToScopArrayInfoTy &IDToSAI;
 
   llvm::Value *createOp(__isl_take isl_ast_expr *Expr);
   llvm::Value *createOpUnary(__isl_take isl_ast_expr *Expr);
