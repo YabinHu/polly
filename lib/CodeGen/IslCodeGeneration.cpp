@@ -74,6 +74,24 @@ static cl::opt<std::string>
     GPUTriple("polly-gpgpu-triple-isl",
               cl::desc("Target triple for GPU code generation"), cl::Hidden,
               cl::init("nvptx64-nvidia-cuda"), cl::cat(PollyCategory));
+
+static cl::opt<bool>
+    UsePrivateMemory("polly-use-private-memory",
+                     cl::desc("Use private memory for kernel code generation"),
+                     cl::Hidden, cl::value_desc("Use private memory if true"),
+                     cl::init(false), cl::ZeroOrMore, cl::cat(PollyCategory));
+
+static cl::opt<bool>
+    UseSharedMemory("polly-use-shared-memory",
+                    cl::desc("Use shared memory for kernel code generation"),
+                    cl::Hidden, cl::value_desc("Use shared memory if true"),
+                    cl::init(false), cl::ZeroOrMore, cl::cat(PollyCategory));
+
+static cl::opt<bool> LiveRangeReordering(
+    "polly-live-range-reordering",
+    cl::desc("Allow successive live ranges on the same element be reordered"),
+    cl::Hidden, cl::value_desc("Use live range reordering if true"),
+    cl::init(false), cl::ZeroOrMore, cl::cat(PollyCategory));
 } /* end namespace polly */
 #endif /* GPU_CODEGEN */
 
@@ -1097,13 +1115,13 @@ public:
       Options->ctx = nullptr;
       Options->sizes = nullptr;
       Options->tile_size = 32;
-      Options->use_private_memory = 0;
-      Options->use_shared_memory = 0;
+      Options->use_private_memory = UsePrivateMemory;
+      Options->use_shared_memory = UseSharedMemory;
       Options->max_shared_memory = 8192 * 6;
       Options->target = 1; /* CUDA/PTX codegen */
       Options->openmp = 0;
       Options->linearize_device_arrays = 0;
-      Options->live_range_reordering = 0;
+      Options->live_range_reordering = LiveRangeReordering;
       Options->opencl_compiler_options = nullptr;
       Options->opencl_use_gpu = 0;
       errs() << "hello ptx code generator.\n";
